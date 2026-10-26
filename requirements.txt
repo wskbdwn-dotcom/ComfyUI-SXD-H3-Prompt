@@ -1,0 +1,5 @@
+# ComfyUI normally provides these already.
+numpy
+Pillow
+# Install a compatible GPU build of JamePeng/llama-cpp-python separately.
+# Do not replace an existing compatible backend with an arbitrary PyPI build.

@@ -1,0 +1,18 @@
+{
+  "upstream": {
+    "repository": "https://github.com/goohai/Goohai-MiniMax-H3_Integration",
+    "revision": "2ae83e4f0f7781604e9c0ad9ec2348b0f1e30c21",
+    "source_file": "prompt_optimizer.py",
+    "sha256": "fe0a0f99e262f04c20b3d1a83e7c47096b4e8c9783ca24c569aa45968a403a3f",
+    "license": "GPL-3.0-or-later",
+    "function_sha256": {
+      "_system_prompt": "3b5932678309608b0dd3276fe3377665180c1330355f1a7f11279a5a33981e51",
+      "_strip_filenames": "8c0e6f570411760312d39d236e8053033f4c521296440787fbd46191c76bc20f",
+      "_format_prompt_sections": "5f1fc91ec5e31a22e90251090d9ca42ae9a88d76920c7b4387381a5fcb7b8213",
+      "_normalize_subject_shorthand": "a6ab9e4b055729a22c9e1c412da126301caba2d3463632800ace88cf5f127db3",
+      "_extract_explicit_dialogues": "df2f700f9608cdf9783a087cbfa7eefc292f323b071e6f1afe6710c641005571",
+      "_ensure_supplied_dialogues": "ba7053d62fe431c9635d4f5a31ceffce3120c132d3a2261c6bd5c3376aeb3fa3",
+      "_ensure_fl2va_picture_labels": "bc87f5796e546d97d12d0b80f28b58e49bf1ba7ed8e9b3ef992f35562a177fb4"
+    }
+  }
+}
