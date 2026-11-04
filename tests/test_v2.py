@@ -50,6 +50,39 @@ def digest(value):
 
 
 class InferenceAdapterTests(unittest.TestCase):
+    def test_thinking_budget_schema_and_forwarding(self):
+        schema = nodes.H3AuthorGemma4ExpandV2.INPUT_TYPES()['required']['max_tokens'][1]
+        self.assertEqual(schema['default'], 4096)
+        self.assertEqual(schema['max'], 32768)
+        adapter.H3AuthorGemma4Expand().expand(**self.args, enable_thinking=True,
+                                            max_tokens=16384, n_ctx=32768)
+        self.assertEqual(self.call['max_tokens'], 16384)
+        self.assertIn(('thinking', True), self.events)
+        self.assertEqual(self.instance._ctx.tokens, [])
+
+    def test_truncation_reports_budget_without_publishing_partial_content(self):
+        self.response = {'choices': [{'finish_reason': 'length', 'message': {
+            'content': 'PRIVATE PARTIAL', 'reasoning_content': 'PRIVATE REASONING'}}],
+            'usage': {'prompt_tokens': 6000, 'completion_tokens': 8192, 'total_tokens': 14192}}
+        with self.assertRaises(RuntimeError) as caught:
+            adapter.H3AuthorGemma4Expand().expand(**self.args, enable_thinking=True,
+                                                max_tokens=8192, n_ctx=32768)
+        message = str(caught.exception)
+        for expected in ('max_tokens=8192', 'n_ctx=32768', 'enable_thinking=True',
+                         'prompt_tokens=6000', 'completion_tokens=8192', 'total_tokens=14192'):
+            self.assertIn(expected, message)
+        self.assertNotIn('PRIVATE', message)
+        self.assertNotIn('关闭 enable_thinking', message)
+        self.assertIsNone(adapter._RESIDENT)
+
+    def test_truncation_missing_usage_is_not_reported_as_zero(self):
+        for usage in (None, {}, 'invalid', {'prompt_tokens': 'PRIVATE'}):
+            response = {'choices': [{'finish_reason': 'length'}], 'usage': usage}
+            with self.assertRaises(RuntimeError) as caught:
+                adapter._final_content(response)
+            self.assertIn('prompt_tokens=未提供', str(caught.exception))
+            self.assertNotIn('PRIVATE', str(caught.exception))
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         folder_paths.models_dir = self.tmp.name

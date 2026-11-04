@@ -108,10 +108,24 @@ def _messages(prompt, image_data, duration, output_language):
     ]
 
 
-def _final_content(response):
+def _final_content(response, *, max_tokens=None, n_ctx=None, enable_thinking=None):
     choice = response['choices'][0]
     if choice.get('finish_reason') == 'length':
-        raise RuntimeError("扩写达到 max_tokens 上限并被截断。请提高上限或关闭 enable_thinking 后重试。")
+        usage = response.get('usage') or {}
+        if not isinstance(usage, dict):
+            usage = {}
+        def count(name):
+            value = usage.get(name)
+            return value if type(value) is int and value >= 0 else '未提供'
+        raise RuntimeError(
+            "扩写被截断（finish_reason=length），未将不完整正文传给 H3。"
+            f" 请求参数：max_tokens={max_tokens}, n_ctx={n_ctx}, enable_thinking={enable_thinking}。"
+            f" 后端用量：prompt_tokens={count('prompt_tokens')}, "
+            f"completion_tokens={count('completion_tokens')}, total_tokens={count('total_tokens')}。"
+            " 思考与最终正文共享生成额度；输入规则和图片也占用上下文。"
+            " 请保持所需的思考开关，检查输出预算和剩余上下文；"
+            "仅凭 length 不能区分两者，也不能排除模型重复生成。"
+        )
     # Do not merge reasoning_content into the H3 prompt. Some Gemma backends
     # instead return a leading native thought channel inside content.
     text = choice['message'].get('content')
@@ -290,7 +304,8 @@ class H3AuthorGemma4Expand:
             'mmproj': ('STRING', {'default': 'gemma-4-26B-A4B-it-heretic-mmproj.bf16.gguf'}),
             'enable_thinking': ('BOOLEAN', {'default': False, 'tooltip': '直接传给 Gemma4 处理器，无需修改插件源码。26B-A4B / 31B 可切换。'}),
             'output_language': (['中文', 'English'], {'default': '中文'}),
-            'max_tokens': ('INT', {'default': 4096, 'min': 512, 'max': 8192}),
+            'max_tokens': ('INT', {'default': 4096, 'min': 512, 'max': 32768,
+                'tooltip': '思考与最终正文共享的输出额度；还受 n_ctx 剩余空间限制。思考模式可先试16384，n_ctx设32768；不保证一定足够。'}),
             'n_ctx': ('INT', {'default': 16384, 'min': 2048, 'max': 65536, 'step': 128}),
             'n_gpu_layers': ('INT', {'default': -1, 'min': -1, 'max': 999, 'tooltip': '-1 全部可卸载层放 GPU；0 使用 CPU。'}),
             'fps': ('FLOAT', {'default': 24.0, 'min': 1.0, 'max': 120.0}),
@@ -341,13 +356,16 @@ class H3AuthorGemma4Expand:
                                       enable_thinking, n_ctx, n_gpu_layers, mm)
                 interrupt()
                 _reset_inference_state(llm)
+                _LOG.info('H3 Gemma4: GENERATE thinking=%s max_tokens=%d n_ctx=%d',
+                          bool(enable_thinking), int(max_tokens), int(n_ctx))
                 response = _chat_with_interrupt(
                     llm, StoppingCriteriaList([interrupt]),
                     messages=messages, seed=int(seed) % (2**32),
                     max_tokens=int(max_tokens), temperature=0.2, top_p=0.9,
                 )
                 interrupt()
-                text = _final_content(response)
+                text = _final_content(response, max_tokens=int(max_tokens),
+                                      n_ctx=int(n_ctx), enable_thinking=bool(enable_thinking))
                 result = (_postprocess(text, prompt, duration, output_language, _task)
                           if _author_postprocess else text)
                 if not result.strip():
