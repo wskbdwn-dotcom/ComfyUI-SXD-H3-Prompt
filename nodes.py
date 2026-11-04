@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 
 from . import runtime
+from .live import LiveTrace
 
 DEFAULTS = json.loads(Path(__file__).with_name('rule_templates.json').read_text())
 KEYFRAMES = '首尾帧'
@@ -155,10 +156,10 @@ class H3AuthorGemma4ExpandV2(runtime.H3AuthorGemma4Expand):
         optional['reference_batch'] = ('IMAGE', {'tooltip': '仅全能参考模式使用；追加在独立参考图之后，总数最多9张。'})
         # Append the optional widget after every pre-existing widget.
         optional.update(super().INPUT_TYPES().get('optional', {}))
-        return {'required': required, 'optional': optional}
+        return {'required': required, 'optional': optional, 'hidden': {'unique_id': 'UNIQUE_ID'}}
 
-    RETURN_TYPES = ('STRING', 'STRING', 'STRING')
-    RETURN_NAMES = ('optimized_prompt', 'applied_rules', 'media_mapping')
+    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING')
+    RETURN_NAMES = ('optimized_prompt', 'applied_rules', 'media_mapping', 'raw_output')
     CATEGORY = 'H3/Author Gemma4'
     DESCRIPTION = '两个可编辑规则框，按模式选择；只修改扩写，不给下游视频生成节点自动添加尾帧或参考图。'
 
@@ -167,14 +168,21 @@ class H3AuthorGemma4ExpandV2(runtime.H3AuthorGemma4Expand):
                n_ctx=16384, n_gpu_layers=-1, fps=24.0, mode=KEYFRAMES,
                keyframe_rules=DEFAULTS['keyframe_rules'], reference_rules=DEFAULTS['reference_rules'],
                author_postprocess=True, first_frame=None, last_frame=None, reference_batch=None,
-               release_after_expansion=False, **references):
+               release_after_expansion=False, unique_id=None, **references):
         allowed = {f'reference_{i}' for i in range(2, 10)}
         if set(references) - allowed:
             raise ValueError('未知参考图输入：' + ', '.join(sorted(set(references) - allowed)))
         task, messages, mapping = prepare(prompt, mode, keyframe_rules, reference_rules,
             frame_count, fps, output_language, first_frame, last_frame, reference_batch, **references)
-        result = super().expand(prompt, first_frame, frame_count, seed, model, mmproj,
-            enable_thinking, output_language, max_tokens, n_ctx, n_gpu_layers, fps,
-            _messages_override=messages, _task=task, _author_postprocess=author_postprocess,
-            release_after_expansion=release_after_expansion)
-        return result[0], messages[0]['content'], mapping
+        trace = LiveTrace(unique_id)
+        trace.send('starting', force=True)
+        try:
+            result = super().expand(prompt, first_frame, frame_count, seed, model, mmproj,
+                enable_thinking, output_language, max_tokens, n_ctx, n_gpu_layers, fps,
+                _messages_override=messages, _task=task, _author_postprocess=author_postprocess,
+                release_after_expansion=release_after_expansion, _trace=trace)
+        except BaseException:
+            trace.send('error_or_cancelled', force=True)
+            raise
+        trace.send('done', force=True)
+        return result[0], messages[0]['content'], mapping, trace.text

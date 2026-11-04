@@ -139,7 +139,7 @@ class InferenceAdapterTests(unittest.TestCase):
             # Deliberately reject unknown keywords: the real chat entry point
             # does NOT accept stopping_criteria (unlike create_completion).
             def create_chat_completion(self, messages, seed, max_tokens,
-                                       temperature, top_p):
+                                       temperature, top_p, stream=False):
                 if self._ctx.tokens:
                     raise RuntimeError('Fatal Decode Error at Pos 0: stale native state')
                 parent.assertEqual(self._hybrid_cache_mgr.saved, [])
@@ -150,8 +150,8 @@ class InferenceAdapterTests(unittest.TestCase):
                 parent.call = dict(messages=messages, seed=seed, max_tokens=max_tokens,
                                    temperature=temperature, top_p=top_p)
                 return self.create_completion(prompt='rendered image + prompt',
-                    stopping_criteria=[lambda *args: False])
-            def create_completion(self, prompt, stopping_criteria=None):
+                    stopping_criteria=[lambda *args: False], stream=stream)
+            def create_completion(self, prompt, stopping_criteria=None, stream=False):
                 parent.events.append('generate')
                 parent.criteria = stopping_criteria
                 if getattr(parent, 'cancel_during_generation', False):
@@ -159,6 +159,15 @@ class InferenceAdapterTests(unittest.TestCase):
                 for criterion in stopping_criteria or []:
                     criterion(None, None)
                 if isinstance(parent.response, Exception): raise parent.response
+                if stream:
+                    message = parent.response['choices'][0].get('message', {})
+                    text = message.get('content') or ''
+                    reason = parent.response['choices'][0]['finish_reason']
+                    def chunks():
+                        yield {'choices': [{'text': text, 'delta': {'content': text}, 'finish_reason': None}]}
+                        yield {'choices': [{'text': '', 'delta': {}, 'finish_reason': reason}],
+                               'usage': parent.response.get('usage')}
+                    return chunks()
                 return parent.response
             def close(self): parent.events.append('close_llama')
         self.Handler, self.Llama = Handler, Llama
@@ -406,7 +415,7 @@ class InferenceAdapterTests(unittest.TestCase):
         n = nodes.H3AuthorGemma4ExpandV2()
         for mode in (nodes.KEYFRAMES, nodes.REFERENCES):
             result = n.expand(**self.args, mode=mode, release_after_expansion=True)
-            self.assertEqual(len(result),3)
+            self.assertEqual(len(result),4)
             self.assertIsNone(adapter._RESIDENT)
         self.assertEqual(self.events.count('close_llama'),2)
         self.assertEqual(self.events.count('close_handler'),2)
@@ -430,10 +439,113 @@ class InferenceAdapterTests(unittest.TestCase):
         result = nodes.H3AuthorGemma4ExpandV2().expand(**self.args,
             keyframe_rules='Output free text.', author_postprocess=False)
         self.assertEqual(result[0], 'free text')
+        self.assertEqual(result[3], 'free text')
         self.events.clear()
         with self.assertRaises(ValueError):
             nodes.H3AuthorGemma4ExpandV2().expand(**self.args, keyframe_rules='{{bad}}')
         self.assertEqual(self.events, [])
+
+
+class LiveOutputTests(unittest.TestCase):
+    def trace(self):
+        trace = nodes.LiveTrace('1150')
+        self.sent = []
+        trace.sender = lambda event, data, client: self.sent.append((event, data, client))
+        trace.client = 'requesting-client'
+        return trace
+
+    def test_stream_is_consumed_before_restoring_wrapper_and_preserves_native_markers(self):
+        trace = self.trace()
+        stops = ['<eos>', '<turn|>', '<|tool_response>']
+        observed = []
+        class Llama:
+            def create_completion(self, **kwargs):
+                observed.append(kwargs)
+                yield {'choices': [{'text': '<|channel>thought\n分析', 'finish_reason': None}]}
+                self_test.assertTrue(trace.parts)  # Delivered before model completes.
+                yield {'choices': [{'text': '<channel|>最终正文', 'finish_reason': 'stop'}],
+                       'usage': {'prompt_tokens': 20, 'completion_tokens': 10, 'total_tokens': 30}}
+            def create_chat_completion(self, stream):
+                self_test.assertTrue(stream)
+                # Deferred call reproduces the real generator lifetime hazard.
+                for chunk in self.create_completion(stream=True, stop=stops):
+                    yield {'choices': [{'delta': {'content': ''},
+                        'finish_reason': chunk['choices'][0]['finish_reason']}]}
+        self_test = self
+        llm = Llama()
+        response = adapter._chat_with_interrupt(llm, [lambda *a: False], trace=trace)
+        self.assertEqual(adapter._final_content(response), '最终正文')
+        self.assertEqual(response['usage']['total_tokens'], 30)
+        self.assertTrue(trace.saw_thought_end)
+        self.assertEqual(trace.stop, stops)
+        self.assertNotIn('<channel|>', observed[0]['stop'])
+        self.assertNotIn('create_completion', vars(llm))
+        trace.send('done', force=True)
+        self.assertTrue(all(item[2] == 'requesting-client' for item in self.sent))
+        self.assertIn('分析', ''.join(item[1]['delta'] for item in self.sent))
+
+    def test_split_thought_marker_and_length_preserve_preview_but_reject_h3(self):
+        trace = self.trace()
+        for text in ('<|channel>thought分析<chan', 'nel|>尚未完成'):
+            trace.capture({'choices': [{'text': text, 'finish_reason': None}]})
+        response = trace.collect(iter([{'choices': [{'delta': {}, 'finish_reason': 'length'}]}]))
+        trace.send('error_or_cancelled', force=True)
+        self.assertTrue(trace.saw_thought_end)
+        self.assertIn('尚未完成', self.sent[-1][1]['delta'])
+        with self.assertRaisesRegex(RuntimeError, 'finish_reason=length'):
+            adapter._final_content(response)
+        self.assertIsNone(response['usage'])  # Never manufacture token counts.
+
+    def test_stream_cancel_restores_override_and_closes_generator(self):
+        trace = self.trace()
+        closed = []
+        class Cancelled(BaseException): pass
+        class Llama:
+            def create_completion(self, **kwargs):
+                try:
+                    yield {'choices': [{'text': '正在思考', 'finish_reason': None}]}
+                    for criterion in kwargs['stopping_criteria']: criterion()
+                finally:
+                    closed.append(True)
+            def create_chat_completion(self, stream):
+                yield from self.create_completion(stream=stream)
+        def cancel(): raise Cancelled()
+        llm = Llama()
+        original = llm.create_completion
+        llm.create_completion = original
+        with self.assertRaises(Cancelled):
+            adapter._chat_with_interrupt(llm, [cancel], trace=trace)
+        self.assertIs(llm.create_completion, original)
+        self.assertEqual(closed, [True])
+        self.assertEqual(trace.text, '正在思考')
+
+    def test_stream_without_terminal_reason_fails_closed(self):
+        with self.assertRaisesRegex(RuntimeError, '未返回结束状态'):
+            self.trace().collect(iter([]))
+
+    def test_no_client_does_not_broadcast(self):
+        server = types.ModuleType('server')
+        send = mock.Mock()
+        server.PromptServer = types.SimpleNamespace(instance=types.SimpleNamespace(client_id=None, send_sync=send))
+        with mock.patch.dict(sys.modules, {'server': server}):
+            trace = nodes.LiveTrace('1150')
+            trace.send('starting', force=True)
+        send.assert_not_called()
+
+    def test_preview_transport_failure_does_not_break_inference(self):
+        trace = self.trace()
+        trace.sender = mock.Mock(side_effect=RuntimeError('socket unavailable'))
+        with self.assertLogs(level='WARNING'):
+            trace.send('starting', force=True)
+        self.assertIsNone(trace.sender)
+        trace.capture({'choices': [{'text': '正常正文', 'finish_reason': 'stop'}]})
+        self.assertEqual(trace.text, '正常正文')
+
+    def test_display_node_supports_cached_result(self):
+        live = sys.modules[spec.name + '.live']
+        result = live.H3PromptLiveDisplay().show('cached raw text')
+        self.assertEqual(result['ui']['text'], ['cached raw text'])
+        self.assertEqual(result['result'], ('cached raw text',))
 
 
 class ModeAndRuleTests(unittest.TestCase):
@@ -529,13 +641,13 @@ class ModeAndRuleTests(unittest.TestCase):
         _, _, mapping = self.prepare(mode=nodes.REFERENCES, reference_batch=self.image(9))
         self.assertEqual(len(json.loads(mapping)['media']), 9)
 
-    def test_author_functions_unchanged_and_three_outputs(self):
+    def test_author_functions_unchanged_and_original_outputs_preserved(self):
         manifest = json.loads((ROOT/'source_reference.json').read_text())
         source = (PLUGIN/'author_rules.py').read_text()
         functions = {n.name: ast.get_source_segment(source,n) for n in ast.parse(source).body if isinstance(n,ast.FunctionDef)}
         for name, sha in manifest['upstream']['function_sha256'].items():
             self.assertEqual(hashlib.sha256(functions[name].encode()).hexdigest(), sha)
-        self.assertEqual(nodes.H3AuthorGemma4ExpandV2.RETURN_NAMES,
+        self.assertEqual(nodes.H3AuthorGemma4ExpandV2.RETURN_NAMES[:3],
                          ('optimized_prompt','applied_rules','media_mapping'))
 
 

@@ -2,7 +2,7 @@
 """Backend I2VA adapter for the Goohai optimizer rules and local Gemma4.
 
 Author rules and postprocessing are vendored verbatim in author_rules.py.
-No dependency on ComfyUI-llama-cpp_vlm, frontend hooks, or network services.
+No dependency on ComfyUI-llama-cpp_vlm or external network services.
 """
 from __future__ import annotations
 
@@ -152,7 +152,7 @@ def _postprocess(text, prompt, duration, output_language, task='I2VA'):
     return author._normalize_subject_shorthand(formatted)
 
 
-def _chat_with_interrupt(llm, criteria, **kwargs):
+def _chat_with_interrupt(llm, criteria, trace=None, **kwargs):
     """Chat forwards to create_completion, where stopping_criteria is supported.
 
     Bind cancellation only to this adapter-owned instance and restore it even
@@ -165,11 +165,20 @@ def _chat_with_interrupt(llm, criteria, **kwargs):
         existing = options.get('stopping_criteria')
         options['stopping_criteria'] = type(criteria)(
             [*criteria, *(existing or [])])
-        return original(*args, **options)
+        if trace is not None:
+            stops = options.get('stop') or []
+            trace.stop = [stops] if isinstance(stops, str) else list(stops)
+        result = original(*args, **options)
+        return trace.observe(result) if trace is not None and options.get('stream') else result
 
     try:
         llm.create_completion = complete
-        return llm.create_chat_completion(**kwargs)
+        if trace is not None:
+            kwargs['stream'] = True
+        response = llm.create_chat_completion(**kwargs)
+        # Consume while the instance wrapper remains installed: chat handlers
+        # may defer their create_completion call until iteration begins.
+        return trace.collect(response) if trace is not None else response
     finally:
         if had_override:
             llm.create_completion = original
@@ -331,7 +340,7 @@ class H3AuthorGemma4Expand:
                enable_thinking=False, output_language='中文', max_tokens=4096,
                n_ctx=16384, n_gpu_layers=-1, fps=24.0,
                _messages_override=None, _task="I2VA", _author_postprocess=True,
-               release_after_expansion=False):
+               release_after_expansion=False, _trace=None):
         from comfy import model_management as mm
         if not math.isfinite(fps) or fps <= 0 or frame_count <= 0:
             raise ValueError("视频帧数及帧率必须为正数。")
@@ -360,7 +369,7 @@ class H3AuthorGemma4Expand:
                 _LOG.info('H3 Gemma4: GENERATE thinking=%s max_tokens=%d n_ctx=%d',
                           bool(enable_thinking), int(max_tokens), int(n_ctx))
                 response = _chat_with_interrupt(
-                    llm, StoppingCriteriaList([interrupt]),
+                    llm, StoppingCriteriaList([interrupt]), trace=_trace,
                     messages=messages, seed=int(seed) % (2**32),
                     max_tokens=int(max_tokens), temperature=0.2, top_p=0.9,
                 )
