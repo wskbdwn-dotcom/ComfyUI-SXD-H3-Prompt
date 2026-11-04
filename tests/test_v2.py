@@ -53,10 +53,15 @@ class InferenceAdapterTests(unittest.TestCase):
     def test_thinking_budget_schema_and_forwarding(self):
         schema = nodes.H3AuthorGemma4ExpandV2.INPUT_TYPES()['required']['max_tokens'][1]
         self.assertEqual(schema['default'], 4096)
-        self.assertEqual(schema['max'], 32768)
+        self.assertEqual(schema['max'], 1048576)
+        context_schema = nodes.H3AuthorGemma4ExpandV2.INPUT_TYPES()['required']['n_ctx'][1]
+        self.assertEqual(context_schema['max'], 1048576)
+        self.assertEqual(context_schema['default'], 16384)
         adapter.H3AuthorGemma4Expand().expand(**self.args, enable_thinking=True,
-                                            max_tokens=16384, n_ctx=32768)
-        self.assertEqual(self.call['max_tokens'], 16384)
+                                            max_tokens=65536, n_ctx=262144)
+        self.assertEqual(self.call['max_tokens'], 65536)
+        loads = [event[1] for event in self.events if isinstance(event, tuple) and event[0] == 'load_llama']
+        self.assertEqual(loads[-1]['n_ctx'], 262144)
         self.assertIn(('thinking', True), self.events)
         self.assertEqual(self.instance._ctx.tokens, [])
 

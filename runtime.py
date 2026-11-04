@@ -304,9 +304,10 @@ class H3AuthorGemma4Expand:
             'mmproj': ('STRING', {'default': 'gemma-4-26B-A4B-it-heretic-mmproj.bf16.gguf'}),
             'enable_thinking': ('BOOLEAN', {'default': False, 'tooltip': '直接传给 Gemma4 处理器，无需修改插件源码。26B-A4B / 31B 可切换。'}),
             'output_language': (['中文', 'English'], {'default': '中文'}),
-            'max_tokens': ('INT', {'default': 4096, 'min': 512, 'max': 32768,
-                'tooltip': '思考与最终正文共享的输出额度；还受 n_ctx 剩余空间限制。思考模式可先试16384，n_ctx设32768；不保证一定足够。'}),
-            'n_ctx': ('INT', {'default': 16384, 'min': 2048, 'max': 65536, 'step': 128}),
+            'max_tokens': ('INT', {'default': 4096, 'min': 512, 'max': 1048576,
+                'tooltip': '思考与最终正文共享的输出额度。界面上限不是模型容量保证；实际受 n_ctx 剩余空间及后端限制。'}),
+            'n_ctx': ('INT', {'default': 16384, 'min': 2048, 'max': 1048576, 'step': 128,
+                'tooltip': '输入、图片、思考与正文共用的上下文容量。请按模型支持范围和显存设置；界面允许更大数值不代表模型支持。修改后会重新加载模型。'}),
             'n_gpu_layers': ('INT', {'default': -1, 'min': -1, 'max': 999, 'tooltip': '-1 全部可卸载层放 GPU；0 使用 CPU。'}),
             'fps': ('FLOAT', {'default': 24.0, 'min': 1.0, 'max': 120.0}),
         }, 'optional': {
