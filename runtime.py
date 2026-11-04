@@ -152,16 +152,22 @@ def _postprocess(text, prompt, duration, output_language, task='I2VA'):
     return author._normalize_subject_shorthand(formatted)
 
 
-def _chat_with_interrupt(llm, criteria, trace=None, **kwargs):
+def _chat_with_interrupt(llm, criteria, trace=None, penalty_last_n=None, **kwargs):
     """Chat forwards to create_completion, where stopping_criteria is supported.
 
     Bind cancellation only to this adapter-owned instance and restore it even
     on failure. Never patch the Llama class or third-party source files.
     """
     original = llm.create_completion
+    if penalty_last_n is not None and 'penalty_last_n' not in inspect.signature(original).parameters:
+        raise RuntimeError('当前后端 create_completion 不支持 penalty_last_n，无法应用重复检查范围。')
     had_override = "create_completion" in vars(llm)
 
     def complete(*args, **options):
+        # MTMDChatHandler in 0.3.35 drops this chat argument. Forward it at
+        # the supported completion entry point on this owned instance only.
+        if penalty_last_n is not None:
+            options['penalty_last_n'] = int(penalty_last_n)
         existing = options.get('stopping_criteria')
         options['stopping_criteria'] = type(criteria)(
             [*criteria, *(existing or [])])
@@ -340,7 +346,7 @@ class H3AuthorGemma4Expand:
                enable_thinking=False, output_language='中文', max_tokens=4096,
                n_ctx=16384, n_gpu_layers=-1, fps=24.0,
                _messages_override=None, _task="I2VA", _author_postprocess=True,
-               release_after_expansion=False, _trace=None):
+               release_after_expansion=False, _trace=None, _sampling=None, _penalty_last_n=None):
         from comfy import model_management as mm
         if not math.isfinite(fps) or fps <= 0 or frame_count <= 0:
             raise ValueError("视频帧数及帧率必须为正数。")
@@ -369,9 +375,9 @@ class H3AuthorGemma4Expand:
                 _LOG.info('H3 Gemma4: GENERATE thinking=%s max_tokens=%d n_ctx=%d',
                           bool(enable_thinking), int(max_tokens), int(n_ctx))
                 response = _chat_with_interrupt(
-                    llm, StoppingCriteriaList([interrupt]), trace=_trace,
+                    llm, StoppingCriteriaList([interrupt]), trace=_trace, penalty_last_n=_penalty_last_n,
                     messages=messages, seed=int(seed) % (2**32),
-                    max_tokens=int(max_tokens), temperature=0.2, top_p=0.9,
+                    max_tokens=int(max_tokens), **(_sampling or {'temperature': 0.2, 'top_p': 0.9}),
                 )
                 interrupt()
                 text = _final_content(response, max_tokens=int(max_tokens),

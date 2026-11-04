@@ -139,7 +139,7 @@ class InferenceAdapterTests(unittest.TestCase):
             # Deliberately reject unknown keywords: the real chat entry point
             # does NOT accept stopping_criteria (unlike create_completion).
             def create_chat_completion(self, messages, seed, max_tokens,
-                                       temperature, top_p, stream=False):
+                                       temperature, top_p, stream=False, top_k=40, min_p=0.05, repeat_penalty=1.0):
                 if self._ctx.tokens:
                     raise RuntimeError('Fatal Decode Error at Pos 0: stale native state')
                 parent.assertEqual(self._hybrid_cache_mgr.saved, [])
@@ -148,10 +148,11 @@ class InferenceAdapterTests(unittest.TestCase):
                 parent.assertEqual(self.state, [])
                 self.state.append(messages)
                 parent.call = dict(messages=messages, seed=seed, max_tokens=max_tokens,
-                                   temperature=temperature, top_p=top_p)
+                                   temperature=temperature, top_p=top_p, top_k=top_k, min_p=min_p, repeat_penalty=repeat_penalty)
                 return self.create_completion(prompt='rendered image + prompt',
                     stopping_criteria=[lambda *args: False], stream=stream)
-            def create_completion(self, prompt, stopping_criteria=None, stream=False):
+            def create_completion(self, prompt, stopping_criteria=None, stream=False, penalty_last_n=64):
+                parent.penalty_last_n = penalty_last_n
                 parent.events.append('generate')
                 parent.criteria = stopping_criteria
                 if getattr(parent, 'cancel_during_generation', False):
@@ -445,6 +446,44 @@ class InferenceAdapterTests(unittest.TestCase):
             nodes.H3AuthorGemma4ExpandV2().expand(**self.args, keyframe_rules='{{bad}}')
         self.assertEqual(self.events, [])
 
+    def test_sampler_controls_reach_backend_without_reloading_weights(self):
+        node = nodes.H3AuthorGemma4ExpandV2()
+        node.expand(**self.args)
+        original = self.instance
+        self.assertEqual(self.call['temperature'], 1.0)
+        self.assertEqual(self.call['top_k'], 64)
+        self.assertEqual(self.call['top_p'], 0.95)
+        self.assertEqual(self.call['min_p'], 0.0)
+        self.assertEqual(self.call['repeat_penalty'], 1.08)
+        self.assertEqual(self.penalty_last_n, 4096)
+        node.expand(**self.args, temperature=0.8, top_k=32, top_p=0.9,
+                    min_p=0.02, repeat_penalty=1.0, penalty_last_n=1024)
+        self.assertIs(self.instance, original)
+        self.assertEqual(self.call['temperature'], 0.8)
+        self.assertEqual(self.call['repeat_penalty'], 1.0)
+        self.assertEqual(self.penalty_last_n, 1024)
+
+    def test_invalid_sampler_rejected_before_loading(self):
+        for kwargs in ({'temperature': float('nan')}, {'repeat_penalty': 0.5}, {'penalty_last_n': 0}):
+            with self.assertRaises(ValueError):
+                nodes.H3AuthorGemma4ExpandV2().expand(**self.args, **kwargs)
+        self.assertEqual(self.events, [])
+
+    def test_new_sampler_widgets_are_appended_after_original_release_switch(self):
+        optional = list(nodes.H3AuthorGemma4ExpandV2.INPUT_TYPES()['optional'])
+        self.assertEqual(optional[optional.index('release_after_expansion') + 1:],
+                         ['temperature', 'top_k', 'top_p', 'min_p', 'repeat_penalty',
+                          'penalty_last_n', 'stop_on_repetition'])
+
+    def test_repetition_failure_releases_model_and_preserves_preview(self):
+        line = 'Check punctuation, formatting and section order before answering.\n'
+        self.response = {'choices': [{'finish_reason': 'stop', 'message': {
+            'content': '<|channel>thought\n' + line * 4}}]}
+        with self.assertRaisesRegex(RuntimeError, '连续4遍'):
+            nodes.H3AuthorGemma4ExpandV2().expand(**self.args, enable_thinking=True)
+        self.assertIsNone(adapter._RESIDENT)
+        self.assertEqual(self.events[-2:], ['close_handler', 'close_llama'])
+
 
 class LiveOutputTests(unittest.TestCase):
     def trace(self):
@@ -540,6 +579,35 @@ class LiveOutputTests(unittest.TestCase):
         self.assertIsNone(trace.sender)
         trace.capture({'choices': [{'text': '正常正文', 'finish_reason': 'stop'}]})
         self.assertEqual(trace.text, '正常正文')
+
+    def test_repetition_guard_works_across_chunk_boundaries(self):
+        trace = self.trace()
+        trace.stop_on_repetition = True
+        source = '<|channel>thought\n' + ('Check the section headings and spacing.\nCheck the order and punctuation.\n' * 4)
+        with self.assertRaisesRegex(RuntimeError, '连续4遍'):
+            for i in range(0, len(source), 7):
+                trace.capture({'choices': [{'text': source[i:i+7]}]})
+        self.assertTrue(trace.repetition_detected)
+        self.assertEqual(self.sent[-1][1]['status'], 'repetition_detected')
+        self.assertIn('punctuation', trace.text)
+
+    def test_guard_ignores_final_channel_and_can_be_disabled(self):
+        repeated = 'Repeated words in a poem are intentional, this is a long refrain.\n' * 8
+        for prefix, enabled in [('<|channel>thought\n<channel|>', True),
+                                ('', True), ('<|channel>thought\n', False)]:
+            trace = nodes.LiveTrace(stop_on_repetition=enabled)
+            for part in (prefix, repeated):
+                trace.capture({'choices': [{'text': part}]})
+            self.assertFalse(trace.repetition_detected)
+        trace = nodes.LiveTrace(stop_on_repetition=True)
+        for i in range(100):
+            trace.capture({'choices': [{'text': f'Distinct analysis step {i}\n'}]})
+        self.assertFalse(trace.repetition_detected)
+
+    def test_penalty_window_requires_supported_completion_parameter(self):
+        llm = types.SimpleNamespace(create_completion=lambda **kwargs: None)
+        with self.assertRaisesRegex(RuntimeError, '不支持 penalty_last_n'):
+            adapter._chat_with_interrupt(llm, [], penalty_last_n=4096)
 
     def test_display_node_supports_cached_result(self):
         live = sys.modules[spec.name + '.live']

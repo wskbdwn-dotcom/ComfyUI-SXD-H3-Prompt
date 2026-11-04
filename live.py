@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Observe raw completion chunks without changing model sampling or stop tokens."""
+from collections import deque
 import logging
 import time
 import uuid
@@ -9,11 +10,14 @@ EVENT = 'sxd-h3-stream'
 
 
 class LiveTrace:
-    def __init__(self, node_id=None):
+    def __init__(self, node_id=None, stop_on_repetition=False):
         self.parts, self.pending = [], []
         self.usage, self.finish_reason = None, None
         self.stop, self.saw_thought_end = [], False
         self.tail = ''
+        self.stop_on_repetition = stop_on_repetition
+        self.saw_thought_start, self.repetition_detected = False, False
+        self.lines, self.partial_line = deque(maxlen=48), ''
         self.run = uuid.uuid4().hex
         self.node_id = str(node_id)
         self.sender, self.client = None, None
@@ -55,11 +59,34 @@ class LiveTrace:
                 self.parts.append(text)
                 self.pending.append(text)
                 scan = self.tail + text
+                self.saw_thought_start |= '<|channel>thought' in scan
                 self.saw_thought_end |= '<channel|>' in scan
                 self.tail = scan[-32:]
+                if self.stop_on_repetition and self.saw_thought_start and not self.saw_thought_end:
+                    self.check_repetition(text)
             if choice.get('finish_reason') is not None:
                 self.finish_reason = choice['finish_reason']
         self.send('generating')
+
+    def check_repetition(self, text):
+        # Bounded exact line-group detector. No semantic guesses or time limit.
+        lines = (self.partial_line + text).split('\n')
+        self.partial_line = lines.pop()[-16000:]
+        for line in lines:
+            line = ' '.join(line.split())
+            if not line:
+                continue
+            self.lines.append(line)
+            recent = list(self.lines)
+            for width in range(1, len(recent) // 4 + 1):
+                block = recent[-width:]
+                if sum(map(len, block)) * 4 < 200:
+                    continue
+                if recent[-4 * width:] == block * 4:
+                    self.repetition_detected = True
+                    self.send('repetition_detected', force=True)
+                    raise RuntimeError('检测到思考区连续4遍完全重复的长文本，已提前停止，未传给 H3。'
+                                       '实时面板保留了输出；可调整采样参数，或关闭 stop_on_repetition 后对照测试。')
 
     def observe(self, chunks):
         try:

@@ -156,6 +156,18 @@ class H3AuthorGemma4ExpandV2(runtime.H3AuthorGemma4Expand):
         optional['reference_batch'] = ('IMAGE', {'tooltip': '仅全能参考模式使用；追加在独立参考图之后，总数最多9张。'})
         # Append the optional widget after every pre-existing widget.
         optional.update(super().INPUT_TYPES().get('optional', {}))
+        optional.update({
+            'temperature': ('FLOAT', {'default': 1.0, 'min': 0.0, 'max': 2.0, 'step': 0.05}),
+            'top_k': ('INT', {'default': 64, 'min': 0, 'max': 1000}),
+            'top_p': ('FLOAT', {'default': 0.95, 'min': 0.01, 'max': 1.0, 'step': 0.01}),
+            'min_p': ('FLOAT', {'default': 0.0, 'min': 0.0, 'max': 1.0, 'step': 0.01}),
+            'repeat_penalty': ('FLOAT', {'default': 1.08, 'min': 1.0, 'max': 2.0, 'step': 0.01,
+                'tooltip': '1.0 关闭重复惩罚；1.08 为待实测的温和起点，过高可能影响表达。'}),
+            'penalty_last_n': ('INT', {'default': 4096, 'min': 1, 'max': 1048576,
+                'tooltip': '重复惩罚检查的最近 token 范围，直接传至推理接口。'}),
+            'stop_on_repetition': ('BOOLEAN', {'default': True,
+                'tooltip': '思考区中连续4遍完全重复的长行组会停止并报错；不是强制结束思考，也不会输出半成品。可关闭。'}),
+        })
         return {'required': required, 'optional': optional, 'hidden': {'unique_id': 'UNIQUE_ID'}}
 
     RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING')
@@ -168,21 +180,32 @@ class H3AuthorGemma4ExpandV2(runtime.H3AuthorGemma4Expand):
                n_ctx=16384, n_gpu_layers=-1, fps=24.0, mode=KEYFRAMES,
                keyframe_rules=DEFAULTS['keyframe_rules'], reference_rules=DEFAULTS['reference_rules'],
                author_postprocess=True, first_frame=None, last_frame=None, reference_batch=None,
-               release_after_expansion=False, unique_id=None, **references):
+               release_after_expansion=False, unique_id=None,
+               temperature=1.0, top_k=64, top_p=0.95, min_p=0.0,
+               repeat_penalty=1.08, penalty_last_n=4096, stop_on_repetition=True, **references):
+        for name, value, low, high in (
+            ('temperature', temperature, 0, 2), ('top_k', top_k, 0, 1000),
+            ('top_p', top_p, 0.01, 1), ('min_p', min_p, 0, 1),
+            ('repeat_penalty', repeat_penalty, 1, 2), ('penalty_last_n', penalty_last_n, 1, 1048576)):
+            if not math.isfinite(value) or not low <= value <= high:
+                raise ValueError(f'{name} 必须在 {low} 到 {high} 之间。')
+        sampling = dict(temperature=float(temperature), top_k=int(top_k),
+                        top_p=float(top_p), min_p=float(min_p), repeat_penalty=float(repeat_penalty))
         allowed = {f'reference_{i}' for i in range(2, 10)}
         if set(references) - allowed:
             raise ValueError('未知参考图输入：' + ', '.join(sorted(set(references) - allowed)))
         task, messages, mapping = prepare(prompt, mode, keyframe_rules, reference_rules,
             frame_count, fps, output_language, first_frame, last_frame, reference_batch, **references)
-        trace = LiveTrace(unique_id)
+        trace = LiveTrace(unique_id, stop_on_repetition=stop_on_repetition)
         trace.send('starting', force=True)
         try:
             result = super().expand(prompt, first_frame, frame_count, seed, model, mmproj,
                 enable_thinking, output_language, max_tokens, n_ctx, n_gpu_layers, fps,
                 _messages_override=messages, _task=task, _author_postprocess=author_postprocess,
-                release_after_expansion=release_after_expansion, _trace=trace)
+                release_after_expansion=release_after_expansion, _trace=trace,
+                _sampling=sampling, _penalty_last_n=penalty_last_n)
         except BaseException:
-            trace.send('error_or_cancelled', force=True)
+            trace.send('repetition_detected' if trace.repetition_detected else 'error_or_cancelled', force=True)
             raise
         trace.send('done', force=True)
         return result[0], messages[0]['content'], mapping, trace.text
