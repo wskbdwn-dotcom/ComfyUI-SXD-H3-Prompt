@@ -167,6 +167,10 @@ node tests/test_live.mjs
 
 发布前仍需在目标 GPU 上验证连续两轮扩写，以及与 H3、其他插件共存。离线测试不等于 GPU 验收。
 
+## Qwen 图生图的 Gemma 思考保护
+
+使用 KLL `SimpleQwenVLggufV2` 的图生图工作流，可通过本仓库的[可选兼容补丁](compat/qwen-gemma-thinking-guard/README.md)安装重复循环、截断和参数透传保护。拉取代码后需显式运行安装器；不会自动修改 KLL 插件，也不改变现有 H3 节点。
+
 ## 来源与许可
 
 作者规则来自 [Goohai-MiniMax-H3_Integration](https://github.com/goohai/Goohai-MiniMax-H3_Integration)，固定提交 `2ae83e4f0f7781604e9c0ad9ec2348b0f1e30c21` 的 `prompt_optimizer.py`。
