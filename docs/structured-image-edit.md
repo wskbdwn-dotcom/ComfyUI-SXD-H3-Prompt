@@ -1,5 +1,7 @@
 # 单图结构化编辑扩写
 
+如需在画布中自行编辑规则并直接生成最终 prompt，请使用 [v9-live 自定义规则工作流](../workflows/qwen/image2image_qwen2.1-gemma-v9-live-custom-rules.json)。节点 1201 编辑规则，1200 填要求与可选事实。本页描述的是另一条可选的结构化流程。
+
 新增节点 `SXDGemmaSpatialPlan` 和 `SXDSpatialPlanAssemble`，供 v9-live 的扩写阶段使用。现有 `SXDGemmaImageTask` 的 `prompt` 与 `anatomy` 任务继续沿用原接口。
 
 ## 更新与工作流
