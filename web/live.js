@@ -10,9 +10,10 @@ const labels = {starting: '准备 / 加载模型', generating: '正在生成',
 function sourceId(node) {
     const input = node.inputs?.find(i => i.name === 'raw_output');
     const link = node.graph?.links?.[input?.link];
-    if (!link || link.origin_slot !== 3) return null;
+    if (!link) return null;
     const source = node.graph.getNodeById(link.origin_id);
-    return source?.comfyClass === 'H3AuthorGemma4ExpandV2' ? String(source.id) : null;
+    const slot = {H3AuthorGemma4ExpandV2: 3, SXDGemmaImageTask: 1}[source?.comfyClass];
+    return slot !== undefined && link.origin_slot === slot ? String(source.id) : null;
 }
 
 function render(view, text) {

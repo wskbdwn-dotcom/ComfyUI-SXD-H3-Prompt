@@ -143,7 +143,8 @@ class SXDGemmaImageTask:
             'seed': ('INT', {'forceInput': True, 'min': 0, 'max': 0xffffffffffffffff}),
             'task': (['prompt', 'anatomy'], {'default': 'prompt'}),
             'release_after_run': ('BOOLEAN', {'default': False}),
-        }, 'optional': {name: ('IMAGE',) for name in ('image', 'image2', 'image3', 'image4')}}
+        }, 'optional': {name: ('IMAGE',) for name in ('image', 'image2', 'image3', 'image4')},
+            'hidden': {'unique_id': 'UNIQUE_ID'}}
 
     RETURN_TYPES = ('STRING', 'STRING')
     RETURN_NAMES = ('text', 'raw_output')
@@ -157,7 +158,8 @@ class SXDGemmaImageTask:
         return repr([runtime._file_identity(path) for path in paths])
 
     def run(self, config_override, system_prompt_override, user_prompt, seed,
-            task='prompt', release_after_run=False, image=None, image2=None, image3=None, image4=None):
+            task='prompt', release_after_run=False, image=None, image2=None, image3=None, image4=None,
+            unique_id=None):
         if task not in ('prompt', 'anatomy'):
             raise ValueError('task 必须为 prompt 或 anatomy。')
         config, paths = parse_config(config_override)
@@ -165,7 +167,8 @@ class SXDGemmaImageTask:
                                    [image, image2, image3, image4], config)
         if task == 'anatomy' and count != 1:
             raise ValueError('大结构检查必须且只能输入一张成图。')
-        trace = Trace(config, validate=lambda text: validate_answer(text, task))
+        trace = Trace(config, validate=lambda text: validate_answer(text, task), node_id=unique_id)
+        trace.send('starting')
         try:
             result = runtime.H3AuthorGemma4Expand().expand(
                 prompt=user_prompt, first_frame=None, frame_count=1, fps=1, seed=seed,
@@ -176,6 +179,10 @@ class SXDGemmaImageTask:
                 release_after_expansion=release_after_run, _trace=trace,
                 _penalty_last_n=config['penalty_last_n'],
                 _sampling={key: config[key] for key in ('temperature', 'top_k', 'top_p', 'min_p', 'repeat_penalty')})
-        except Exception as error:
-            raise RuntimeError('Gemma 图像任务失败：' + str(error) + trace.diagnostic()) from error
-        return result[0], ''.join(trace.raw or trace.reasoning or trace.content)
+        except BaseException as error:
+            trace.send('repetition_detected' if 'THINKING_LOOP' in str(error) else 'error_or_cancelled')
+            if isinstance(error, Exception):
+                raise RuntimeError('Gemma 图像任务失败：' + str(error) + trace.diagnostic()) from error
+            raise
+        trace.send('done')
+        return result[0], trace.raw_output

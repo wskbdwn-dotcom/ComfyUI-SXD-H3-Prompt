@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
+from types import SimpleNamespace
 
 import numpy as np
 from PIL import Image
@@ -32,6 +34,51 @@ class ImageTaskTests(unittest.TestCase):
                     user_prompt='换成蓝色外套', seed=99, image=self.args['first_frame'])
         args.update(overrides)
         return nodes.SXDGemmaImageTask().run(**args)
+
+    def test_live_success_and_error_keep_raw_output(self):
+        events = []
+        server = SimpleNamespace(PromptServer=SimpleNamespace(instance=SimpleNamespace(
+            client_id='browser', send_sync=lambda event, data, client: events.append((event, data, client)))))
+        with mock.patch.dict(sys.modules, {'server': server}):
+            result = self.run_task('<think>检查衣服。</think>' + ANSWER, unique_id='1151')
+            self.assertEqual(events[0][1]['status'], 'starting')
+            self.assertEqual(events[-1][1]['status'], 'done')
+            self.assertTrue(all(e[1]['node'] == '1151' and e[2] == 'browser' for e in events))
+            visible = ''.join(e[1]['delta'] for e in events)
+            self.assertEqual(visible, result[1])
+            self.assertEqual(visible.count('检查衣服。'), 1)
+            self.assertEqual(result[0], ANSWER)
+            events.clear()
+            with self.assertRaises(RuntimeError):
+                self.run_task('<think>部分思考', finish='length', unique_id='1152')
+            self.assertEqual(events[-1][1]['status'], 'error_or_cancelled')
+            self.assertIn('部分思考', ''.join(e[1]['delta'] for e in events))
+
+    def test_parsed_only_stream_is_visible_before_completion(self):
+        trace = trace_module.Trace({}, validate=lambda value: value, node_id='1151')
+        events = []
+        trace.preview.sender = lambda event, data, client: events.append(data)
+        trace.send('starting')
+        trace.record({'choices': [{'text': ''}]}, True)
+        def chunks():
+            trace.preview.last_send = 0
+            yield {'choices': [{'delta': {'reasoning_content': '先确认动作。'}}]}
+            self.assertIn('先确认动作。', ''.join(e['delta'] for e in events))
+            yield {'choices': [{'delta': {'content': ANSWER}, 'finish_reason': 'stop'}]}
+        result = trace.collect(chunks())
+        trace.send('done')
+        self.assertEqual(result['choices'][0]['message']['content'], ANSWER)
+        self.assertEqual(trace.raw_output, '<think>先确认动作。</think>' + ANSWER)
+        self.assertEqual(''.join(e['delta'] for e in events), trace.raw_output)
+
+    def test_preview_disconnect_does_not_break_inference(self):
+        trace = trace_module.Trace({})
+        trace.preview.sender = mock.Mock(side_effect=RuntimeError('disconnected'))
+        with self.assertLogs(trace_module.LiveTrace.__module__, level='WARNING'):
+            trace.send('starting')
+        self.assertIsNone(trace.preview.sender)
+        result = trace.collect(iter([{'choices': [{'delta': {'content': ANSWER}, 'finish_reason': 'stop'}]}]))
+        self.assertEqual(result['choices'][0]['message']['content'], ANSWER)
 
     def test_native_prompt_and_anatomy_share_h3_cache(self):
         legacy.nodes.H3AuthorGemma4ExpandV2().expand(**self.args, enable_thinking=True, n_ctx=32768)

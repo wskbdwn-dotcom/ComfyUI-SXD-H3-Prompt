@@ -133,7 +133,7 @@ class H3PromptLiveDisplay:
     FUNCTION = 'show'
     CATEGORY = 'H3/Author Gemma4'
     OUTPUT_NODE = True
-    DESCRIPTION = '直接连接扩写节点第4个 raw_output 输出，实时查看原始思考和正文。报错时保留已收到的预览。不要将此输出接到 H3 提示词。'
+    DESCRIPTION = '直接连接 H3 扩写节点第4个或 SXD Gemma 图像节点第2个 raw_output 输出，实时查看思考和正文。报错时保留预览；不要将原始输出接入生图或视频提示词。'
 
     def show(self, raw_output):
         return {'ui': {'text': [raw_output]}, 'result': (raw_output,)}

@@ -63,4 +63,22 @@ assert(expand.originalCalled);
 assert.equal(expand.outputs.length, 4);
 assert.equal(expand.outputs[3].name, 'raw_output');
 assert.deepEqual(expand.widgets_values, ['existing rules']);
+// Image expansion and anatomy instances share the viewer but use output slot 1.
+const imageNode = new Display();
+imageNode.graph = {links: {7: {origin_id: 1151, origin_slot: 1}},
+    getNodeById: id => ({id, comfyClass: 'SXDGemmaImageTask'})};
+imageNode.onNodeCreated();
+const imageBox = elements.at(-1);
+emit({node: '1151', status: 'starting'});
+emit({node: '1151', status: 'generating', delta: 'image thinking'});
+assert.equal(imageBox.value, 'image thinking');
+emit({node: '1152', status: 'generating', delta: 'other instance'});
+assert.equal(imageBox.value, 'image thinking');
+imageNode.graph.links[7].origin_slot = 0;
+emit({node: '1151', status: 'generating', delta: 'wrong output slot'});
+assert.equal(imageBox.value, 'image thinking');
+imageNode.graph.links[7].origin_slot = 1;
+emit({node: '1151', status: 'error_or_cancelled', delta: ' partial'});
+assert.equal(imageBox.value, 'image thinking partial');
+imageNode.onRemoved();
 console.log('Live preview event routing, error retention, cache, cleanup and old workflow migration: PASS');

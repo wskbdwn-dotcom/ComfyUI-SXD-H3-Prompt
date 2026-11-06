@@ -2,6 +2,7 @@
 """Bounded stream validation for native image nodes; no third-party patching."""
 from collections import deque
 import re
+from .live import LiveTrace
 
 VERSION = '1.1.0'
 
@@ -60,7 +61,7 @@ class Repetition:
 
 
 class Trace:
-    def __init__(self, config, cancel=_cancel, validate=None):
+    def __init__(self, config, cancel=_cancel, validate=None, node_id=None):
         self.config, self.cancel = config, cancel
         self.validate = validate or (lambda text: text)
         self.raw, self.content, self.reasoning = [], [], []
@@ -70,6 +71,19 @@ class Trace:
         self.saw_native_thought = False
         self.scan_done = False
         self.detector, self.reason_detector = Repetition(), Repetition()
+        self.preview = LiveTrace(node_id)
+        self.preview_thinking = False
+
+    @property
+    def raw_output(self):
+        if self.raw:
+            return ''.join(self.raw)
+        thought, content = ''.join(self.reasoning), ''.join(self.content)
+        return f'<think>{thought}</think>{content}' if thought else content
+
+    def send(self, status):
+        self.preview.stop = getattr(self, 'stop', [])
+        self.preview.send(status, force=True)
 
     def _scan(self, text):
         if self.scan_done:
@@ -124,7 +138,9 @@ class Trace:
                 self.finishes.append(finish)
             if raw:
                 text = choice.get('text') or ''
-                self.raw.append(text)
+                if text:
+                    self.raw.append(text)
+                self.preview.capture({'choices': [choice]})
                 self._scan(text)
             else:
                 delta = choice.get('delta') or {}
@@ -132,6 +148,22 @@ class Trace:
                 self.content.append(text)
                 thought = delta.get('reasoning_content') or ''
                 self.reasoning.append(thought)
+                # Some backends expose only parsed chat deltas. Never duplicate
+                # these when the underlying completion stream was observed.
+                if not self.raw:
+                    visible = ''
+                    if thought:
+                        if not self.preview_thinking:
+                            visible += '<think>'
+                            self.preview_thinking = True
+                        visible += thought
+                    if text:
+                        if self.preview_thinking:
+                            visible += '</think>'
+                            self.preview_thinking = False
+                            self.preview.saw_thought_end = True
+                        visible += text
+                    self.preview.capture({'choices': [{'text': visible, 'finish_reason': finish}]})
                 # Native completion has already been checked when it carries markers.
                 if thought and not self.saw_native_thought and self.config.get('stop_on_repetition', True):
                     self.reason_detector.feed(thought)
@@ -193,5 +225,6 @@ class Trace:
             _close(chunks)
         # Validate before runtime marks the call successful or keeps the model.
         answer = self.validate(self.answer())
+        self.preview.saw_thought_end |= self.saw_native_thought and self.thought_end is None
         return {'choices': [{'finish_reason': 'stop', 'message': {'content': answer}}],
                 'usage': dict(self.usage)}
