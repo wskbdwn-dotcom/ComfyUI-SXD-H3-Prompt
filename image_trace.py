@@ -1,12 +1,9 @@
-"""Gemma chat guard for the audited KLL runner. No nodes or server registered."""
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Bounded stream validation for native image nodes; no third-party patching."""
 from collections import deque
-import inspect
 import re
-import sys
-import threading
 
-VERSION = '1.0.0'
-_LOCK = threading.RLock()
+VERSION = '1.1.0'
 
 
 class GuardError(RuntimeError):
@@ -63,11 +60,11 @@ class Repetition:
 
 
 class Trace:
-    def __init__(self, config, cancel=_cancel):
+    def __init__(self, config, cancel=_cancel, validate=None):
         self.config, self.cancel = config, cancel
+        self.validate = validate or (lambda text: text)
         self.raw, self.content, self.reasoning = [], [], []
         self.usage, self.finishes = {}, []
-        self.raw_calls = 0
         self.characters = 0
         self.pending, self.thought_end = '', None
         self.saw_native_thought = False
@@ -186,99 +183,15 @@ class Trace:
                 f'n_ctx={self.config.get("n_ctx")}, usage={counts or "未提供"}'
                 '\n已收到的原始输出末尾（仅供诊断，不是最终答案）：\n' + tail)
 
-
-class GuardedLlama:
-    def __init__(self, llm, config, trace):
-        self.llm, self.config, self.trace = llm, config, trace
-
-    def __getattr__(self, key):
-        return getattr(self.llm, key)
-
-    def generate(self, chat, args, kwargs):
-        llm, trace = self.llm, self.trace
-        original = llm.create_completion
-        if 'penalty_last_n' not in inspect.signature(original).parameters:
-            raise GuardError('BACKEND_INCOMPATIBLE: create_completion 未明确支持 penalty_last_n，不能保证防重复参数生效。')
-        window = self.config.get('penalty_last_n', 4096)
-        if type(window) is not int or not 1 <= window <= 1048576:
-            raise GuardError('INVALID_CONFIG: penalty_last_n 必须是有效正整数。')
-        had_override = 'create_completion' in vars(llm)
-
-        def complete(*inner_args, **options):
-            trace.raw_calls += 1
-            options['penalty_last_n'] = window
-            # Preserve the handler's stop tokens and any existing stopping criteria.
-            if not options.get('stream'):
-                raise GuardError('BACKEND_INCOMPATIBLE: 后端未使用请求的流式推理。')
-            return trace.observe(original(*inner_args, **options))
-
-        chunks = None
+    def collect(self, chunks):
+        if isinstance(chunks, dict):
+            raise GuardError('BACKEND_INCOMPATIBLE: 后端未返回请求的流式结果。')
         try:
-            llm.create_completion = complete
-            options = dict(kwargs)
-            options['stream'] = True
-            chunks = (llm.create_chat_completion if chat else llm.create_completion)(*args, **options)
-            if isinstance(chunks, dict):
-                raise GuardError('BACKEND_INCOMPATIBLE: 后端未返回流式迭代器。')
             for chunk in chunks:
-                if chat:
-                    trace.record(chunk, False)
-            if not trace.raw_calls:
-                raise GuardError('BACKEND_INCOMPATIBLE: 未观察到 completion 调用，无法验证重复惩罚范围。')
-            answer = trace.answer()
-            usage = dict(trace.usage)
-            choice = {'finish_reason': 'stop'}
-            choice.update({'message': {'content': answer}} if chat else {'text': answer})
-            return {'choices': [choice], 'usage': usage}
+                self.record(chunk, False)
         finally:
-            try:
-                if chunks is not None and not isinstance(chunks, dict):
-                    _close(chunks)
-            finally:
-                if had_override:
-                    llm.create_completion = original
-                else:
-                    del llm.create_completion
-
-    def create_chat_completion(self, *args, **kwargs):
-        return self.generate(True, args, kwargs)
-
-    def create_completion(self, *args, **kwargs):
-        return self.generate(False, args, kwargs)
-
-
-def run_guarded(infer, llm, config, images, audios, videos, release):
-    """Keep upstream message/image handling; wrap only the inference boundary."""
-    with _LOCK:
-        trace = Trace(config)
-        options = dict(config)
-        options['streaming_mode'] = False  # Guard itself streams and preserves finish state.
-        options['raw_output'] = False
-        options['remove_thinking'] = False  # Already stripped precisely at the boundary.
-        options['debug'] = False  # Upstream speed helper assumes token usage is always present.
-        success = False
-        try:
-            if config.get('chat_handler') != 'gemma4' or config.get('raw_mode'):
-                raise GuardError('INVALID_CONFIG: 此保护入口仅支持 gemma4 的普通 chat 模式。')
-            print(f'[Gemma guard {VERSION}] active; penalty_last_n={config.get("penalty_last_n",4096)}; '
-                  f'stop_on_repetition={config.get("stop_on_repetition",True)}', file=sys.stderr)
-            result, data = infer(GuardedLlama(llm, config, trace), options, images, audios, videos)
-            if result.get('status') != 'success':
-                raise GuardError(result.get('message', 'Inference failed'))
-            success = True
-            return result, data
-        except Exception as error:
-            # Existing upstream node exposes this message through its raw-text output.
-            return {'status': 'error', 'message': str(error) + trace.diagnostic()}, None
-        finally:
-            # A failed or cancelled generation must not leave stale recurrent/KV state.
-            if not success:
-                release()
-
-
-if __name__ == '__main__':
-    # Optional existing subprocess mode; ordinary workflow stays in keep_vram.
-    import qwen3vl_run as runner
-    if not hasattr(runner, '_infer_chat_without_guard'):
-        raise RuntimeError('Gemma guard hooks missing; run install.py first.')
-    runner.main()
+            _close(chunks)
+        # Validate before runtime marks the call successful or keeps the model.
+        answer = self.validate(self.answer())
+        return {'choices': [{'finish_reason': 'stop', 'message': {'content': answer}}],
+                'usage': dict(self.usage)}

@@ -8,3 +8,7 @@ from .live import H3PromptLiveDisplay
 NODE_CLASS_MAPPINGS['H3PromptLiveDisplay'] = H3PromptLiveDisplay
 NODE_DISPLAY_NAME_MAPPINGS['H3PromptLiveDisplay'] = 'H3 · 实时输出查看（思考 / 正文）'
 WEB_DIRECTORY = './web'
+
+from .image_nodes import SXDGemmaImageTask
+NODE_CLASS_MAPPINGS['SXDGemmaImageTask'] = SXDGemmaImageTask
+NODE_DISPLAY_NAME_MAPPINGS['SXDGemmaImageTask'] = 'SXD Gemma · 图像扩写 / 大结构检查'

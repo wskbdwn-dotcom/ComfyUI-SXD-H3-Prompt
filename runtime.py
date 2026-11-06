@@ -346,13 +346,15 @@ class H3AuthorGemma4Expand:
                enable_thinking=False, output_language='中文', max_tokens=4096,
                n_ctx=16384, n_gpu_layers=-1, fps=24.0,
                _messages_override=None, _task="I2VA", _author_postprocess=True,
-               release_after_expansion=False, _trace=None, _sampling=None, _penalty_last_n=None):
+               release_after_expansion=False, _trace=None, _sampling=None, _penalty_last_n=None,
+               _model_paths=None):
         from comfy import model_management as mm
         if not math.isfinite(fps) or fps <= 0 or frame_count <= 0:
             raise ValueError("视频帧数及帧率必须为正数。")
         if re.search(r'(?:^|[-_. ])e[24]b(?:[-_. ]|$)', model.lower()) and not enable_thinking:
             raise ValueError("此适配默认面向 Gemma4 26B-A4B / 31B；E2B/E4B 构建不支持关闭思考，请开启 enable_thinking。")
-        model_path, projector_path = _model_path(model), _model_path(mmproj)
+        model_path, projector_path = (_model_paths if _model_paths is not None
+                                      else (_model_path(model), _model_path(mmproj)))
         Llama, Handler, StoppingCriteriaList = _backend()
         duration = frame_count / fps
         messages = (_messages(prompt, _image_data(first_frame), duration, output_language)
