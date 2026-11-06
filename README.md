@@ -175,7 +175,7 @@ node tests/test_live.mjs
 
 ### 单图结构化编辑扩写（实验功能）
 
-新增 **SXD Gemma · 单图结构化规划** 和 **SXD Gemma · 校验并组装编辑指令**。Gemma 一次生成包含人物位置、基础姿态、躯干朝向、接触端点和镜头信息的规划，程序检查后组装为 `{"prompt":"…"}`。缺字段会报错，不用猜测的默认姿态补齐；组装阶段不调用模型。
+新增 **SXD Gemma · 单图结构化规划** 和 **SXD Gemma · 校验并组装编辑指令**。Gemma 生成包含人物位置、基础姿态、躯干朝向、接触端点和镜头信息的规划，程序检查后组装为 `{"prompt":"…"}`。校验失败最多自动纠正两次，仍不通过才报错；不会猜测缺失的基础姿态，组装阶段不调用模型。
 
 基于 v9-live 的完整副本：[image2image_qwen2.1-gemma-v9-live-structured.json](workflows/qwen/image2image_qwen2.1-gemma-v9-live-structured.json)。更新插件并重启 ComfyUI、刷新页面后导入。填写节点 **1109** 的单张参考图 URL、节点 **1200** 的原始编辑要求；节点 **1201** 是可选的已核验图像事实，换图后需要重新确认。字段规则内置在插件中，此处不粘贴旧扩写规则。模型配置支持 `models/LLM` 或 `models/llm` 下的相对文件名，也可以填现有绝对路径。
 

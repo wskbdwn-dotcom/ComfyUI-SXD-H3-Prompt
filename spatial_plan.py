@@ -97,6 +97,8 @@ def validate_plan(text, user_request=''):
     people, objects = {}, {}
     for i, person in enumerate(plan['people']):
         path = f'people[{i}]'
+        if isinstance(person, dict) and person.get('posture') in ('standing', 'seated', 'crouching', 'lying'):
+            person.setdefault('posture_detail', '')
         _shape(person, PERSON_KEYS, path)
         for key in PERSON_KEYS:
             person[key] = _text(person[key], path + '.' + key, empty=key == 'posture_detail')
@@ -164,7 +166,7 @@ def validate_plan(text, user_request=''):
     for key in CAMERA_KEYS - {'mode'}:
         camera[key] = _text(camera[key], 'camera.' + key, empty=not required)
     if required:
-        if not re.search(r'眼|肩|胸|腹|腰|髋|头|膝|地面|桌面|座面', camera['height']):
+        if not re.search(r'眼|肩|锁骨|胸|腹|腰|髋|头|膝|地面|桌面|座面', camera['height']):
             _error('camera.height', '需要明确身体部位或场景高度参照，不能只写与坐姿持平')
         if '侧' in camera['direction'] and not re.search(r'左|右|原图|参考图', camera['direction']):
             _error('camera.direction', '侧向观察需要明确哪一侧，或明确沿用原图的哪一侧')

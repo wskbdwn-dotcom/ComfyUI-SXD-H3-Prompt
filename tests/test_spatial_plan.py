@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
 
 import test_v2 as legacy
 import test_image_tasks as image_tests
@@ -57,6 +58,17 @@ class PlanContractTests(unittest.TestCase):
             with self.subTest(posture=posture), self.assertRaisesRegex(ValueError, 'posture'):
                 plan_module.assemble(self.encoded(value))
 
+    def test_missing_optional_detail_is_empty_only_for_explicit_simple_postures(self):
+        for posture in ('standing', 'seated', 'crouching', 'lying'):
+            value = fixture(); value['people'][1]['posture'] = posture
+            del value['people'][1]['posture_detail']
+            self.assertEqual(plan_module.validate_plan(self.encoded(value))['people'][1]['posture_detail'], '')
+        for posture in ('kneeling', 'other', 'visible_only'):
+            value = fixture(); value['people'][0]['posture'] = posture
+            del value['people'][0]['posture_detail']
+            with self.subTest(posture=posture), self.assertRaisesRegex(ValueError, 'posture_detail'):
+                plan_module.validate_plan(self.encoded(value))
+
     def test_added_unknown_pose_and_rule_labels_rejected(self):
         for key, new in [('posture', 'visible_only'), ('label', '稳定的人（男子）')]:
             value = fixture(); value['people'][1][key] = new
@@ -96,6 +108,10 @@ class PlanContractTests(unittest.TestCase):
         value['camera']['direction'] = '稍微侧向移动，以覆盖互动空间'
         with self.assertRaisesRegex(ValueError, 'camera.direction'):
             plan_module.assemble(self.encoded(value))
+
+    def test_clavicle_is_a_valid_height_landmark(self):
+        value = fixture(); value['camera']['height'] = '与人物锁骨高度持平'
+        self.assertIn('锁骨高度', plan_module.assemble(self.encoded(value))[1])
 
     def test_missing_height_generic_visibility_and_unspecified_side_rejected(self):
         for key, new in [('height', ''), ('height', '与坐姿持平'),
@@ -151,6 +167,74 @@ class StructuredRuntimeTests(unittest.TestCase):
                       seed=42, image=self.args['first_frame'])
         values.update(overrides)
         return nodes.SXDGemmaSpatialPlan().run(**values)
+
+    def scripted(self, replies, calls):
+        original = self.Llama.create_chat_completion
+        def respond(llm, **kwargs):
+            calls.append(kwargs)
+            reply = replies[min(len(calls) - 1, len(replies) - 1)]
+            self.response = reply if isinstance(reply, Exception) else {
+                'choices': [{'finish_reason': 'stop', 'message': {'content': reply}}]}
+            return original(llm, **kwargs)
+        return mock.patch.object(self.Llama, 'create_chat_completion', respond)
+
+    def test_invalid_plan_is_corrected_with_same_image_request_facts_and_resident(self):
+        value = fixture(); del value['people'][1]['posture']
+        calls = []
+        with self.scripted([json.dumps(value), json.dumps(fixture())], calls):
+            result = self.plan(verified_facts='上身直立，支撑关系不明')
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(json.loads(result[0]), fixture())
+        self.assertEqual(calls[1]['messages'][:2], calls[0]['messages'])
+        self.assertEqual(calls[1]['messages'][2]['role'], 'assistant')
+        self.assertIn('posture', calls[1]['messages'][3]['content'])
+        self.assertEqual(calls[1]['seed'], (calls[0]['seed'] + 1) % 2**32)
+        self.assertEqual(sum(isinstance(e, tuple) and e[0] == 'load_llama' for e in self.events), 1)
+
+    def test_two_corrections_are_bounded_and_invalid_plans_never_reach_assembly(self):
+        value = fixture(); del value['people'][1]['posture']
+        calls = []
+        with self.scripted([json.dumps(value)], calls), self.assertRaisesRegex(RuntimeError, '2 次自动纠正'):
+            self.plan()
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(calls[2]['messages']), 4)
+        self.assertIsNone(legacy.adapter._RESIDENT)
+
+    def test_reported_optional_detail_and_camera_failures_reach_corrective_call(self):
+        value = fixture(); del value['people'][1]['posture_detail']
+        value['camera'].update(height='与人物锁骨高度持平', direction='从侧前方斜视',
+                               visibility='通过调整视角宽度确保两个动作点都能被捕捉')
+        calls = []
+        with self.scripted(['```json\n' + json.dumps(value) + '\n```', json.dumps(fixture())], calls):
+            result = self.plan()
+        self.assertEqual(len(calls), 2)
+        self.assertIn('camera.direction', calls[1]['messages'][3]['content'])
+        self.assertNotIn('缺少字段', calls[1]['messages'][3]['content'])
+        self.assertEqual(json.loads(result[0]), fixture())
+
+    def test_success_on_last_correction_and_release_option(self):
+        value = fixture(); value['camera']['direction'] = '从侧面观察'
+        calls = []
+        with self.scripted([json.dumps(value), json.dumps(value), json.dumps(fixture())], calls):
+            result = self.plan(release_after_run=True)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(json.loads(result[0]), fixture())
+        self.assertIsNone(legacy.adapter._RESIDENT)
+
+    def test_guards_backend_errors_and_cancellation_are_never_retried(self):
+        calls = []
+        with self.scripted([RuntimeError('backend failed')], calls), self.assertRaisesRegex(RuntimeError, 'backend failed'):
+            self.plan()
+        self.assertEqual(len(calls), 1)
+        before = self.events.count('generate')
+        with self.assertRaisesRegex(RuntimeError, 'OUTPUT_TRUNCATED'):
+            self.plan(finish='length')
+        self.assertEqual(self.events.count('generate') - before, 1)
+        calls.clear()
+        self.cancel_during_generation = True
+        with self.scripted([json.dumps(fixture())], calls), self.assertRaises(self.mm.InterruptProcessingException):
+            self.plan()
+        self.assertEqual(len(calls), 1)
 
     def test_one_inference_shared_cache_and_no_inference_during_assembly(self):
         result = self.plan()

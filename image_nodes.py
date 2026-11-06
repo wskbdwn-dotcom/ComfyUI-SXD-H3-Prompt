@@ -3,6 +3,7 @@
 import base64
 import io
 import json
+import logging
 import math
 import re
 from pathlib import Path
@@ -175,29 +176,60 @@ class SXDGemmaImageTask:
         if task == 'spatial_plan' and count != 1:
             raise ValueError('结构化规划必须且只能输入一张参考图。')
         request = user_prompt if _request_for_validation is None else _request_for_validation
-        trace = Trace(config, validate=lambda text: validate_answer(text, task, request), node_id=unique_id)
-        trace.send('starting')
+        initial_messages = prepared
+        attempts = 3 if task == 'spatial_plan' else 1
+        # Check spatial plans outside native inference so a format mistake does
+        # not destroy a healthy model before a bounded corrective call.
+        validator = None if task == 'spatial_plan' else lambda text: validate_answer(text, task, request)
+        trace = Trace(config, validate=validator, node_id=unique_id)
         try:
-            result = runtime.H3AuthorGemma4Expand().expand(
-                prompt=user_prompt, first_frame=None, frame_count=1, fps=1, seed=seed,
-                model=paths[0].name, mmproj=paths[1].name, _model_paths=paths,
-                enable_thinking=config['enable_thinking'], max_tokens=config['max_tokens'],
-                n_ctx=config['n_ctx'], n_gpu_layers=config['n_gpu_layers'],
-                _messages_override=prepared, _author_postprocess=False,
-                release_after_expansion=release_after_run, _trace=trace,
-                _penalty_last_n=config['penalty_last_n'],
-                _sampling={key: config[key] for key in ('temperature', 'top_k', 'top_p', 'min_p', 'repeat_penalty')})
+            for attempt in range(attempts):
+                if attempt:
+                    trace = Trace(config, validate=validator, node_id=unique_id)
+                trace.send('starting')
+                result = runtime.H3AuthorGemma4Expand().expand(
+                    prompt=user_prompt, first_frame=None, frame_count=1, fps=1, seed=seed + attempt,
+                    model=paths[0].name, mmproj=paths[1].name, _model_paths=paths,
+                    enable_thinking=config['enable_thinking'], max_tokens=config['max_tokens'],
+                    n_ctx=config['n_ctx'], n_gpu_layers=config['n_gpu_layers'],
+                    _messages_override=prepared, _author_postprocess=False,
+                    release_after_expansion=release_after_run, _trace=trace,
+                    _penalty_last_n=config['penalty_last_n'],
+                    _sampling={key: config[key] for key in ('temperature', 'top_k', 'top_p', 'min_p', 'repeat_penalty')})
+                if task == 'spatial_plan':
+                    try:
+                        result = (validate_answer(result[0], task, request),)
+                    except ValueError as error:
+                        if attempt == attempts - 1:
+                            runtime.H3AuthorGemma4Release().release()
+                            raise ValueError('已执行 2 次自动纠正，规划仍未通过：' + str(error)) from error
+                        logging.getLogger(__name__).warning(
+                            'Spatial plan correction %d/2: %s', attempt + 1, error)
+                        trace.send('retrying_plan')
+                        # Keep original images/facts and only the latest rejected
+                        # answer, rather than accumulating an unbounded dialogue.
+                        prepared = initial_messages + [
+                            {'role': 'assistant', 'content': result[0]},
+                            {'role': 'user', 'content':
+                                'The previous plan failed application validation: ' + str(error) +
+                                '\nReturn a corrected COMPLETE plan object, not a patch or explanation. '
+                                'Check ALL mandatory fields, base postures, ownership, contact references, '
+                                'camera side/height/framing and concrete occlusion arrangements. '
+                                'An inclination alone is not a base posture or support description. '
+                                'Preserve the original request and verified reference facts above. '
+                                'Do not invent reference facts or change the requested action to bypass validation.'}]
+                        continue
+                trace.send('done')
+                return result[0], trace.raw_output
         except BaseException as error:
             trace.send('repetition_detected' if 'THINKING_LOOP' in str(error) else 'error_or_cancelled')
             if isinstance(error, Exception):
                 raise RuntimeError('Gemma 图像任务失败：' + str(error) + trace.diagnostic()) from error
             raise
-        trace.send('done')
-        return result[0], trace.raw_output
 
 
 class SXDGemmaSpatialPlan(SXDGemmaImageTask):
-    """One model call, the same shared runtime and live trace, a typed plan result."""
+    """One initial plan plus at most two validated corrective model calls."""
     @classmethod
     def INPUT_TYPES(cls):
         fields = super().INPUT_TYPES()
@@ -212,7 +244,7 @@ class SXDGemmaSpatialPlan(SXDGemmaImageTask):
 
     RETURN_TYPES = ('STRING', 'STRING', 'STRING')
     RETURN_NAMES = ('plan_json', 'raw_output', 'user_request')
-    DESCRIPTION = '单图结构化编辑规划；一次 Gemma 调用。缺姿态、镜头等字段时报错，需接结构化组装节点。'
+    DESCRIPTION = '单图结构化编辑规划；校验失败最多自动纠正两次，仍不通过才报错。需接结构化组装节点。'
 
     @classmethod
     def IS_CHANGED(cls, config_override, **kwargs):

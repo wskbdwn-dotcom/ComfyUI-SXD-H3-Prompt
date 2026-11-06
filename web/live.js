@@ -5,6 +5,7 @@ import { api } from '../../scripts/api.js';
 const LIMIT = 200000;
 const views = new Map();
 const labels = {starting: '准备 / 加载模型', generating: '正在生成',
+    retrying_plan: '规划校验未通过，正在自动纠正',
     done: '完成', repetition_detected: '思考重复循环：已停止并保留输出', error_or_cancelled: '报错或取消：已保留部分输出'};
 
 function sourceId(node) {

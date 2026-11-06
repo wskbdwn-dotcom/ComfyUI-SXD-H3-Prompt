@@ -20,7 +20,7 @@ label: distinct natural Chinese person name or role, optionally with a few obser
 origin: reference or added.
 position: final image position or clear scene anchor, plus necessary depth/offset. Use a phrase without repeating the label or a leading position verb.
 posture: standing, seated, kneeling, crouching, lying, other, or visible_only. Select exactly one value. Leaning and facing are NOT posture values.
-posture_detail: support contacts, torso inclination, head direction, or visible configuration where relevant; may be empty for a clear simple posture. Required for kneeling, other, and visible_only. Specify what supports a kneeling or otherwise ambiguous pose.
+posture_detail: support contacts, torso inclination, head direction, or visible configuration where relevant; may be empty for a clear simple posture but still include the key. Required for kneeling, other, and visible_only. Specify what supports a kneeling or otherwise ambiguous pose. Do not use other merely to describe leaning: select the underlying standing, seated, kneeling, crouching or lying posture whenever applicable.
 torso_orientation: explicit torso direction as a phrase following the Chinese noun for torso. Do not substitute proximity, head direction, or inclination for it.
 action: attributable action and target, or the unchanged state for a nonacting reference subject. Do not leave it blank or invent an action just to fill it.
 
