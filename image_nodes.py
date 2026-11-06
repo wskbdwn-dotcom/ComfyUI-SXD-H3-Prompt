@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import math
+import re
 from pathlib import Path
 
 from . import runtime
@@ -30,11 +31,12 @@ def _json(text):
 
 def validate_answer(text, task, user_request=''):
     """Normalize field order, never turn an inference/format error into pass."""
+    text = text.strip()
+    fenced = re.fullmatch(r'```(?:json)?[ \t]*\r?\n(.*?)\r?\n```', text, re.I | re.S)
+    if fenced:
+        text = fenced.group(1).strip()
     if task == 'spatial_plan':
         return spatial_plan.normalized_plan(text, user_request)
-    text = text.strip()
-    if text.startswith('```json\n') and text.endswith('```'):
-        text = text[8:-3].strip()
     value = _json(text)
     if not isinstance(value, dict):
         raise ValueError('最终正文必须是 JSON 对象。')

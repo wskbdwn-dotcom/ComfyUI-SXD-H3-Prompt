@@ -71,6 +71,32 @@ class PlanContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'posture_detail'):
             plan_module.assemble(self.encoded(value))
 
+    def test_repeated_display_names_keep_ids_ownership_and_unique_labels(self):
+        value = fixture()
+        value['people'][0]['label'] = value['people'][1]['label'] = '人物'
+        normalized = plan_module.normalized_plan(self.encoded(value))
+        plan = json.loads(normalized)
+        self.assertEqual([p['label'] for p in plan['people']], ['人物（1）', '人物（2）'])
+        self.assertEqual([p['id'] for p in plan['people']], ['p1', 'p2'])
+        self.assertEqual(plan['objects'][0]['owner_id'], 'p2')
+        self.assertEqual(plan_module.normalized_plan(normalized), normalized)
+        self.assertIn('人物（2）手持的书', plan_module.assemble(normalized)[1])
+
+    def test_display_name_normalization_avoids_existing_name_collisions(self):
+        value = fixture()
+        value['people'][0]['label'] = value['people'][1]['label'] = '人物'
+        extra = dict(value['people'][1], id='p3', label='人物（1）')
+        value['people'].append(extra)
+        plan = plan_module.validate_plan(self.encoded(value))
+        self.assertEqual([p['label'] for p in plan['people']], ['人物（2）', '人物（3）', '人物（1）'])
+
+    def test_abdomen_is_valid_height_but_unknown_camera_side_still_fails(self):
+        value = fixture(); value['camera']['height'] = '高度与人物腹部齐平'
+        self.assertIn('腹部齐平', plan_module.assemble(self.encoded(value))[1])
+        value['camera']['direction'] = '稍微侧向移动，以覆盖互动空间'
+        with self.assertRaisesRegex(ValueError, 'camera.direction'):
+            plan_module.assemble(self.encoded(value))
+
     def test_missing_height_generic_visibility_and_unspecified_side_rejected(self):
         for key, new in [('height', ''), ('height', '与坐姿持平'),
                          ('direction', '从侧面观察'), ('visibility', '完整清晰展示所有互动')]:
@@ -144,6 +170,31 @@ class StructuredRuntimeTests(unittest.TestCase):
                                (json.dumps(fixture()), 'length')]:
             with self.subTest(finish=finish), self.assertRaises(RuntimeError):
                 self.plan(answer, finish)
+            self.assertIsNone(legacy.adapter._RESIDENT)
+
+    def test_whole_fenced_plan_uses_same_validator_and_one_model_call(self):
+        for opening, newline in [('```json', '\n'), ('```JSON', '\r\n'), ('```', '\n')]:
+            before = self.events.count('generate')
+            result = self.plan(opening + newline + json.dumps(fixture()) + newline + '```')
+            self.assertEqual(json.loads(result[0])['version'], 1)
+            self.assertFalse(result[0].startswith('```'))
+            self.assertEqual(self.events.count('generate') - before, 1)
+
+    def test_shared_fence_handling_preserves_prompt_and_anatomy_tasks(self):
+        for task, value in [('prompt', {'prompt': '将外套改为红色。'}),
+                            ('anatomy', {'status': 'uncertain', 'issues': []})]:
+            text = '```json\n' + json.dumps(value) + '\n```'
+            self.assertEqual(json.loads(nodes.validate_answer(text, task)), value)
+
+    def test_fence_does_not_repair_malformed_json_or_missing_semantic_fields(self):
+        body = json.dumps(fixture())
+        missing = fixture(); del missing['people'][1]['posture']
+        for text in ['```json\n' + body, 'Explanation\n```json\n' + body + '\n```',
+                     '```json\n' + body + '\n```\n```json\n' + body + '\n```',
+                     '```json\n' + body[:-1] + '\n```',
+                     '```json\n' + json.dumps(missing) + '\n```']:
+            with self.subTest(text=text[:30]), self.assertRaises(RuntimeError):
+                self.plan(text)
             self.assertIsNone(legacy.adapter._RESIDENT)
 
     def test_exactly_one_reference_image_required(self):

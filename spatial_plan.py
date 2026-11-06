@@ -108,11 +108,22 @@ def validate_plan(text, user_request=''):
             _error(path + '.posture_detail', '此姿态需要说明可见状态或具体支撑方式')
         if person['id'] in people:
             _error(path + '.id', '人物编号重复')
-        if any(person['label'] == p['label'] for p in people.values()):
-            _error(path + '.label', '人物称呼重复，无法区分')
         if any(word in person['label'] for word in ('稳定的人', '新增的人', '参考的人')):
             _error(path + '.label', '请使用自然人物称呼，不输出规则术语')
         people[person['id']] = person
+
+    # IDs own identity. Disambiguate display-only names without changing references.
+    labels = [person['label'] for person in plan['people']]
+    reserved = set(labels)
+    for label in dict.fromkeys(labels):
+        group = [person for person in plan['people'] if person['label'] == label]
+        if len(group) > 1:
+            ordinal = 1
+            for person in group:
+                while f'{label}（{ordinal}）' in reserved:
+                    ordinal += 1
+                person['label'] = f'{label}（{ordinal}）'
+                reserved.add(person['label'])
 
     for i, obj in enumerate(plan['objects']):
         path = f'objects[{i}]'
@@ -153,7 +164,7 @@ def validate_plan(text, user_request=''):
     for key in CAMERA_KEYS - {'mode'}:
         camera[key] = _text(camera[key], 'camera.' + key, empty=not required)
     if required:
-        if not re.search(r'眼|肩|胸|腰|髋|头|膝|地面|桌面|座面', camera['height']):
+        if not re.search(r'眼|肩|胸|腹|腰|髋|头|膝|地面|桌面|座面', camera['height']):
             _error('camera.height', '需要明确身体部位或场景高度参照，不能只写与坐姿持平')
         if '侧' in camera['direction'] and not re.search(r'左|右|原图|参考图', camera['direction']):
             _error('camera.direction', '侧向观察需要明确哪一侧，或明确沿用原图的哪一侧')

@@ -16,7 +16,7 @@ retain: concise scoped retention text; may be empty.
 
 Each people item has EXACTLY these keys:
 id: unique short ID.
-label: natural Chinese person name or role, optionally with a few observed appearance cues. Do not translate editorial terms such as stable person, reference person, or added person into labels.
+label: distinct natural Chinese person name or role, optionally with a few observed appearance cues. Different IDs should have distinguishable labels. Do not translate editorial terms such as stable person, reference person, or added person into labels.
 origin: reference or added.
 position: final image position or clear scene anchor, plus necessary depth/offset. Use a phrase without repeating the label or a leading position verb.
 posture: standing, seated, kneeling, crouching, lying, other, or visible_only. Select exactly one value. Leaning and facing are NOT posture values.
@@ -39,7 +39,7 @@ spatial_detail: necessary reach, height, side, connecting path, or support arran
 The camera object has EXACTLY mode, direction, height, framing, visibility.
 mode: retain or adjust. Preserve user-fixed composition. Use the smallest necessary adjustment otherwise.
 For spatial tasks every other camera field must be nonempty:
-direction: chosen observation direction relative to the arranged people or a scene anchor; specify the side if side choice determines connection visibility.
+direction: chosen observation direction relative to the arranged people or a scene anchor. For any side or oblique view, explicitly identify left or right relative to that reference. A request to move slightly sideways is not a selected observation direction; choose the side during planning instead of leaving it to the image model.
 height: height/elevation relative to a defined visible body landmark or scene level. A posture category or eye-level label alone is not a specific landmark reference.
 framing: actual included body regions, relevant objects and contact endpoints, not only a shot-size label. Include relevant hip or limb cues where needed, without requiring all bodies or limbs fully visible.
 visibility: physical offset, gap, overlap, or allowed occlusion explaining what can be seen and which person performs it. Generic promises that all details will be clear are insufficient.
