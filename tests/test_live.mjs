@@ -81,4 +81,17 @@ imageNode.graph.links[7].origin_slot = 1;
 emit({node: '1151', status: 'error_or_cancelled', delta: ' partial'});
 assert.equal(imageBox.value, 'image thinking partial');
 imageNode.onRemoved();
+// Structured planning keeps output slot 1 for the same live display contract.
+const planNode = new Display();
+planNode.graph = {links: {7: {origin_id: 1153, origin_slot: 1}},
+    getNodeById: id => ({id, comfyClass: 'SXDGemmaSpatialPlan'})};
+planNode.onNodeCreated();
+const planBox = elements.at(-1);
+emit({node: '1153', status: 'starting'});
+emit({node: '1153', status: 'generating', delta: 'structured planning'});
+assert.equal(planBox.value, 'structured planning');
+planNode.graph.links[7].origin_slot = 0;
+emit({node: '1153', status: 'generating', delta: 'not a raw stream'});
+assert.equal(planBox.value, 'structured planning');
+planNode.onRemoved();
 console.log('Live preview event routing, error retention, cache, cleanup and old workflow migration: PASS');

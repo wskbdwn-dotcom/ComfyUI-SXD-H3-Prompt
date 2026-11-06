@@ -12,3 +12,9 @@ WEB_DIRECTORY = './web'
 from .image_nodes import SXDGemmaImageTask
 NODE_CLASS_MAPPINGS['SXDGemmaImageTask'] = SXDGemmaImageTask
 NODE_DISPLAY_NAME_MAPPINGS['SXDGemmaImageTask'] = 'SXD Gemma · 图像扩写 / 大结构检查'
+
+from .image_nodes import SXDGemmaSpatialPlan, SXDSpatialPlanAssemble
+NODE_CLASS_MAPPINGS['SXDGemmaSpatialPlan'] = SXDGemmaSpatialPlan
+NODE_CLASS_MAPPINGS['SXDSpatialPlanAssemble'] = SXDSpatialPlanAssemble
+NODE_DISPLAY_NAME_MAPPINGS['SXDGemmaSpatialPlan'] = 'SXD Gemma · 单图结构化规划'
+NODE_DISPLAY_NAME_MAPPINGS['SXDSpatialPlanAssemble'] = 'SXD Gemma · 校验并组装编辑指令'

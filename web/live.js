@@ -12,7 +12,7 @@ function sourceId(node) {
     const link = node.graph?.links?.[input?.link];
     if (!link) return null;
     const source = node.graph.getNodeById(link.origin_id);
-    const slot = {H3AuthorGemma4ExpandV2: 3, SXDGemmaImageTask: 1}[source?.comfyClass];
+    const slot = {H3AuthorGemma4ExpandV2: 3, SXDGemmaImageTask: 1, SXDGemmaSpatialPlan: 1}[source?.comfyClass];
     return slot !== undefined && link.origin_slot === slot ? String(source.id) : null;
 }
 

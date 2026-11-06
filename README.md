@@ -173,6 +173,16 @@ node tests/test_live.mjs
 
 此前的 KLL 补丁目录和安装器已移除，不再运行 `compat/.../install.py`。更新后使用配套 **v6 原生节点工作流**；v4/v5 仍引用旧节点，不会自动迁移。安装、参数和兼容范围见[图像节点说明](docs/image-tasks.md)。
 
+### 单图结构化编辑扩写（实验功能）
+
+新增 **SXD Gemma · 单图结构化规划** 和 **SXD Gemma · 校验并组装编辑指令**。Gemma 一次生成包含人物位置、基础姿态、躯干朝向、接触端点和镜头信息的规划，程序检查后组装为 `{"prompt":"…"}`。缺字段会报错，不用猜测的默认姿态补齐；组装阶段不调用模型。
+
+基于 v9-live 的完整副本：[image2image_qwen2.1-gemma-v9-live-structured.json](workflows/qwen/image2image_qwen2.1-gemma-v9-live-structured.json)。更新插件并重启 ComfyUI、刷新页面后导入。填写节点 **1109** 的单张参考图 URL、节点 **1200** 的原始编辑要求；节点 **1201** 是可选的已核验图像事实，换图后需要重新确认。字段规则内置在插件中，此处不粘贴旧扩写规则。模型配置支持 `models/LLM` 或 `models/llm` 下的相对文件名，也可以填现有绝对路径。
+
+副本保留实时输出、首次生图、成图检查和按需修复链路。使用原 v9-live 所需的其他节点；两次实时预览仍直接连接各自的原始输出。结构化扩写只接受单张参考图；旧扩写和检查节点继续支持原接口。
+
+这是生成后的结构与引用检查，不是底层强制解码，也不保证图像识别、空间合理性或动作语义正确。离线测试使用模拟后端，仍需实际 Gemma 与生图验证。详细输入和边界见[结构化图像编辑说明](docs/structured-image-edit.md)。
+
 ## 来源与许可
 
 作者规则来自 [Goohai-MiniMax-H3_Integration](https://github.com/goohai/Goohai-MiniMax-H3_Integration)，固定提交 `2ae83e4f0f7781604e9c0ad9ec2348b0f1e30c21` 的 `prompt_optimizer.py`。

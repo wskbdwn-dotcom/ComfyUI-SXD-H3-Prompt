@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import runtime
 from .image_trace import Trace
+from . import spatial_plan
 
 TYPES = {'extra_arm', 'extra_leg', 'extra_head', 'extra_torso', 'missing_arm',
          'missing_leg', 'body_twist', 'bad_connection'}
@@ -27,8 +28,10 @@ def _json(text):
                       parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))
 
 
-def validate_answer(text, task):
+def validate_answer(text, task, user_request=''):
     """Normalize field order, never turn an inference/format error into pass."""
+    if task == 'spatial_plan':
+        return spatial_plan.normalized_plan(text, user_request)
     text = text.strip()
     if text.startswith('```json\n') and text.endswith('```'):
         text = text[8:-3].strip()
@@ -58,7 +61,7 @@ def validate_answer(text, task):
             normalized.append({key: issue[key].strip() for key in ('type', 'location', 'evidence', 'fix')})
         result = {'status': value['status'], 'issues': normalized}
     else:
-        raise ValueError('task 必须为 prompt 或 anatomy。')
+        raise ValueError('task 必须为 prompt、anatomy 或内部 spatial_plan。')
     return json.dumps(result, ensure_ascii=False, separators=(',', ':'))
 
 
@@ -159,15 +162,18 @@ class SXDGemmaImageTask:
 
     def run(self, config_override, system_prompt_override, user_prompt, seed,
             task='prompt', release_after_run=False, image=None, image2=None, image3=None, image4=None,
-            unique_id=None):
-        if task not in ('prompt', 'anatomy'):
-            raise ValueError('task 必须为 prompt 或 anatomy。')
+            unique_id=None, _request_for_validation=None):
+        if task not in ('prompt', 'anatomy', 'spatial_plan'):
+            raise ValueError('task 必须为 prompt、anatomy 或内部 spatial_plan。')
         config, paths = parse_config(config_override)
         prepared, count = messages(system_prompt_override, user_prompt,
                                    [image, image2, image3, image4], config)
         if task == 'anatomy' and count != 1:
             raise ValueError('大结构检查必须且只能输入一张成图。')
-        trace = Trace(config, validate=lambda text: validate_answer(text, task), node_id=unique_id)
+        if task == 'spatial_plan' and count != 1:
+            raise ValueError('结构化规划必须且只能输入一张参考图。')
+        request = user_prompt if _request_for_validation is None else _request_for_validation
+        trace = Trace(config, validate=lambda text: validate_answer(text, task, request), node_id=unique_id)
         trace.send('starting')
         try:
             result = runtime.H3AuthorGemma4Expand().expand(
@@ -186,3 +192,62 @@ class SXDGemmaImageTask:
             raise
         trace.send('done')
         return result[0], trace.raw_output
+
+
+class SXDGemmaSpatialPlan(SXDGemmaImageTask):
+    """One model call, the same shared runtime and live trace, a typed plan result."""
+    @classmethod
+    def INPUT_TYPES(cls):
+        fields = super().INPUT_TYPES()
+        fields['required'] = {
+            'config_override': ('STRING', {'forceInput': True}),
+            'verified_facts': ('STRING', {'forceInput': True}),
+            'user_prompt': ('STRING', {'forceInput': True}),
+            'seed': ('INT', {'forceInput': True, 'min': 0, 'max': 0xffffffffffffffff}),
+            'release_after_run': ('BOOLEAN', {'default': False}),
+        }
+        return fields
+
+    RETURN_TYPES = ('STRING', 'STRING', 'STRING')
+    RETURN_NAMES = ('plan_json', 'raw_output', 'user_request')
+    DESCRIPTION = '单图结构化编辑规划；一次 Gemma 调用。缺姿态、镜头等字段时报错，需接结构化组装节点。'
+
+    @classmethod
+    def IS_CHANGED(cls, config_override, **kwargs):
+        import hashlib
+        return (super().IS_CHANGED(config_override),
+                hashlib.sha256(spatial_plan.system_rules().encode('utf-8')).hexdigest())
+
+    def run(self, config_override, verified_facts, user_prompt, seed,
+            release_after_run=False, image=None, image2=None, image3=None, image4=None,
+            unique_id=None):
+        if not isinstance(user_prompt, str) or not user_prompt.strip():
+            raise ValueError('原始编辑要求不能为空。')
+        if not isinstance(verified_facts, str):
+            raise ValueError('已核验图像事实必须是文字，可以留空。')
+        content = ('Original editing request:\n' + user_prompt)
+        if verified_facts.strip():
+            content += '\nVerified reference facts (not new actions):\n' + verified_facts
+        result = super().run(config_override, spatial_plan.system_rules(), content, seed,
+            task='spatial_plan', release_after_run=release_after_run,
+            image=image, image2=image2, image3=image3, image4=image4,
+            unique_id=unique_id, _request_for_validation=user_prompt)
+        return result[0], result[1], user_prompt
+
+
+class SXDSpatialPlanAssemble:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {
+            'plan_json': ('STRING', {'forceInput': True}),
+            'user_request': ('STRING', {'forceInput': True}),
+        }}
+
+    RETURN_TYPES = ('STRING', 'STRING')
+    RETURN_NAMES = ('prompt_json', 'prompt')
+    FUNCTION = 'run'
+    CATEGORY = 'SXD/Gemma Image'
+    DESCRIPTION = '不调用模型；检查人物姿态、物品归属和镜头字段，组装为只有 prompt 的中文 JSON。'
+
+    def run(self, plan_json, user_request):
+        return spatial_plan.assemble(plan_json, user_request)
