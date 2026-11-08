@@ -8,3 +8,4 @@ venv/
 *.gguf
 *.safetensors
 *.zip
+pose_data/

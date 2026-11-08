@@ -8,6 +8,7 @@ import math
 import re
 from pathlib import Path
 
+from . import pose_route
 from . import runtime
 from .image_trace import Trace
 from . import spatial_plan
@@ -45,6 +46,14 @@ def validate_answer(text, task, user_request=''):
         if set(value) != {'prompt'} or not isinstance(value['prompt'], str) or not value['prompt'].strip():
             raise ValueError('扩写必须输出非空字符串字段 prompt，不接受其他字段。')
         result = {'prompt': value['prompt'].strip()}
+    elif task == 'contact':
+        parsed = pose_route.parse_contact(text)
+        if parsed['route'] == 'general':
+            result = {'route': 'general'}
+        else:
+            result = {'route': 'pose', 'contacts': parsed['contacts'], 'named_pose': parsed['named_pose'],
+                      'people': parsed['people'], 'vertical': parsed['vertical'],
+                      'face_visible': parsed['face_visible']}
     elif task == 'anatomy':
         if set(value) != {'status', 'issues'} or value['status'] not in ('pass', 'uncertain', 'repair'):
             raise ValueError('检查必须输出 status 和 issues，状态只能是 pass / uncertain / repair。')
@@ -64,7 +73,7 @@ def validate_answer(text, task, user_request=''):
             normalized.append({key: issue[key].strip() for key in ('type', 'location', 'evidence', 'fix')})
         result = {'status': value['status'], 'issues': normalized}
     else:
-        raise ValueError('task 必须为 prompt、anatomy 或内部 spatial_plan。')
+        raise ValueError('task 必须为 prompt、contact、anatomy 或内部 spatial_plan。')
     return json.dumps(result, ensure_ascii=False, separators=(',', ':'))
 
 
@@ -147,7 +156,7 @@ class SXDGemmaImageTask:
             'system_prompt_override': ('STRING', {'forceInput': True}),
             'user_prompt': ('STRING', {'forceInput': True}),
             'seed': ('INT', {'forceInput': True, 'min': 0, 'max': 0xffffffffffffffff}),
-            'task': (['prompt', 'anatomy'], {'default': 'prompt'}),
+            'task': (['prompt', 'contact', 'anatomy'], {'default': 'prompt'}),
             'release_after_run': ('BOOLEAN', {'default': False}),
         }, 'optional': {name: ('IMAGE',) for name in ('image', 'image2', 'image3', 'image4')},
             'hidden': {'unique_id': 'UNIQUE_ID'}}
@@ -166,13 +175,15 @@ class SXDGemmaImageTask:
     def run(self, config_override, system_prompt_override, user_prompt, seed,
             task='prompt', release_after_run=False, image=None, image2=None, image3=None, image4=None,
             unique_id=None, _request_for_validation=None):
-        if task not in ('prompt', 'anatomy', 'spatial_plan'):
-            raise ValueError('task 必须为 prompt、anatomy 或内部 spatial_plan。')
+        if task not in ('prompt', 'contact', 'anatomy', 'spatial_plan'):
+            raise ValueError('task 必须为 prompt、contact、anatomy 或内部 spatial_plan。')
         config, paths = parse_config(config_override)
         prepared, count = messages(system_prompt_override, user_prompt,
                                    [image, image2, image3, image4], config)
         if task == 'anatomy' and count != 1:
             raise ValueError('大结构检查必须且只能输入一张成图。')
+        if task == 'contact' and count < 1:
+            raise ValueError('接触判断必须至少输入一张参考图。')
         if task == 'spatial_plan' and count != 1:
             raise ValueError('结构化规划必须且只能输入一张参考图。')
         request = user_prompt if _request_for_validation is None else _request_for_validation

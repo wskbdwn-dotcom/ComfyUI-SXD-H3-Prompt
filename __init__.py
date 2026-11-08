@@ -18,3 +18,8 @@ NODE_CLASS_MAPPINGS['SXDGemmaSpatialPlan'] = SXDGemmaSpatialPlan
 NODE_CLASS_MAPPINGS['SXDSpatialPlanAssemble'] = SXDSpatialPlanAssemble
 NODE_DISPLAY_NAME_MAPPINGS['SXDGemmaSpatialPlan'] = 'SXD Gemma · 单图结构化规划'
 NODE_DISPLAY_NAME_MAPPINGS['SXDSpatialPlanAssemble'] = 'SXD Gemma · 校验并组装编辑指令'
+
+from .pose_nodes import SXDPoseRoute, register_pose_routes
+NODE_CLASS_MAPPINGS['SXDPoseRoute'] = SXDPoseRoute
+NODE_DISPLAY_NAME_MAPPINGS['SXDPoseRoute'] = 'SXD · 姿势查库'
+register_pose_routes()
