@@ -56,8 +56,8 @@ class LibraryTests(unittest.TestCase):
         for row in rows:
             (folder / f'{row["id"]}.json').write_text(json.dumps(row, ensure_ascii=False), encoding='utf-8')
 
-    def ask(self, library, record=POSE, rules='POSE RULES 不要另选姿势'):
-        return route.prepare(dump(record), '保持衣服', 'RULES', rules, library)
+    def ask(self, library, record=POSE, rules='POSE RULES 不要另选姿势', request='保持衣服'):
+        return route.prepare(dump(record), request, 'RULES', rules, library)
 
     def test_general_route_does_not_read_the_library(self):
         result = route.prepare('{"route":"general"}', '把外套改成蓝色', 'RULES', '', '/missing/poses')
@@ -89,37 +89,62 @@ class LibraryTests(unittest.TestCase):
             missed = self.ask(tmp)
             self.assertFalse(missed['ok'])
             self.assertIn('已停止', missed['status'])
-            self.assertIn('pose_closed', missed['matches'])
+            self.assertEqual(missed['matches'], '[]')
             named = self.ask(tmp, dict(POSE, named_pose='还不能用'))
             self.assertFalse(named['ok'])
-            self.assertIn('pose_closed', named['matches'])
+            self.assertIn('还不是定稿', named['status'])
 
-    def test_several_usable_entries_wait_for_a_priority(self):
+    def test_finalized_entries_rank_by_score_without_a_manual_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.write(Path(tmp), [
-                {'id': 'pose_a', 'usable_for_selection': True, 'pose_sentence': '足接触阴茎。', 'selection_priority': 2},
-                {'id': 'pose_b', 'usable_for_selection': True, 'pose_sentence': '另一条。足接触阴茎。', 'selection_priority': 1},
+                {'id': 'pose_a', 'number': 8, 'usable_for_selection': True,
+                 'pose_sentence': '女人头转向他。足接触阴茎。', 'image_check': {'status': 'conflict'}},
+                {'id': 'pose_b', 'number': 3, 'usable_for_selection': True,
+                 'pose_sentence': '另一条。足接触阴茎。'},
             ])
-            chosen = self.ask(tmp)
-            self.assertIn('pose_b', chosen['status'])
-            self.assertIn('pose_a', chosen['matches'])
-            (Path(tmp) / 'pose_b.json').write_text(json.dumps({
-                'id': 'pose_b', 'usable_for_selection': True, 'pose_sentence': '另一条。足接触阴茎。',
-            }, ensure_ascii=False), encoding='utf-8')
-            waiting = self.ask(tmp)
-            self.assertFalse(waiting['ok'])
-            self.assertIn('默认顺序', waiting['status'])
-            self.assertIn('pose_a', waiting['matches'])
+            numbered = self.ask(tmp)
+            self.assertTrue(numbered['ok'])
+            self.assertIn('pose_b', numbered['status'])
+            headed = self.ask(tmp, request='头转向他，保持衣服')
+            self.assertTrue(headed['ok'])
+            self.assertIn('pose_a', headed['status'])
+            self.assertIn('得分 75', headed['status'])
 
-    def test_installed_library_has_no_selectable_pose(self):
+    def test_installed_library_selects_a_finalized_pose(self):
         if not REAL_LIBRARY.is_dir():
             self.skipTest('local pose library is absent')
         entries = route.load_library(REAL_LIBRARY)
         self.assertGreaterEqual(len(entries), 573)
-        self.assertEqual(sum(entry['usable'] for entry in entries), 0)
+        self.assertGreater(sum(entry['usable'] for entry in entries), 0)
         result = self.ask(REAL_LIBRARY)
-        self.assertFalse(result['ok'])
-        self.assertIn('已停止', result['status'])
+        self.assertTrue(result['ok'])
+        self.assertIn('得分', result['status'])
+
+    def test_extraction_json_and_image_support_choose_the_pose(self):
+        document = {
+            '人数': 2, 'alias': '', '接触': '足接触阴茎', '支撑': '', '轴线': '',
+            'body_parts': {
+                '女方': {'头': '头转向他', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': '', '膝盖': '', '脚': ''},
+                '男方': {'头': '', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': '', '膝盖': '', '脚': ''},
+            },
+        }
+        image = {'支撑': '跪', '姿势已准备': False, '事实': ['女人跪在画面里。']}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [
+                {'id': 'pose_stand', 'number': 1, 'usable_for_selection': True,
+                 'pose_sentence': '女人站着。足接触阴茎。'},
+                {'id': 'pose_kneel', 'number': 9, 'usable_for_selection': True,
+                 'pose_sentence': '女人头转向他，跪着。足接触阴茎。',
+                 'image_check': {'status': 'conflict'}},
+            ])
+            result = route.prepare(dump(document), '保持衣服', 'RULES', 'POSE RULES 不要另选姿势', tmp, dump(image))
+        self.assertTrue(result['ok'])
+        shown = json.loads(result['extraction'])
+        self.assertEqual(shown['接触'], '足接触阴茎')
+        self.assertEqual(shown['body_parts']['女方']['头'], '头转向他')
+        self.assertIn('按图里的支撑选', json.loads(result['support'])['说明'])
+        self.assertEqual(json.loads(result['image_state'])['事实'], ['女人跪在画面里。'])
+        self.assertIn('pose_kneel', result['status'])
 
     def test_zip_replaces_saved_json_and_rejects_images(self):
         def packed(files):
@@ -156,14 +181,21 @@ class PoseWorkflowTests(unittest.TestCase):
         lookup = self.nodes[1403]
         expand = self.nodes[1151]
         self.assertEqual(contact['type'], 'SXDGemmaImageTask')
-        self.assertEqual(contact['widgets_values'][0], 'contact')
+        self.assertEqual(contact['widgets_values'][0], 'extract')
+        self.assertEqual(self.nodes[1408]['widgets_values'][0], 'image_support')
+        self.assertEqual(self.nodes[1407]['widgets_values'][0],
+                         (ROOT / 'workflows/qwen/image-support-rules.txt').read_text())
         self.assertEqual(lookup['type'], 'SXDPoseRoute')
         self.assertEqual(expand['widgets_values'][0], 'prompt')
         self.assertEqual(self.nodes[1400]['widgets_values'][0], self.rules)
         self.assertEqual(self.nodes[1401]['widgets_values'][0], route.POSE_RULES)
         self.assertEqual(self.nodes[1403]['inputs'][3]['name'], 'pose_rules')
         self.assertEqual(self.links[126][1:5], [1402, 0, 1403, 0])
-        self.assertEqual(self.links[130][1:5], [1402, 0, 1405, 0])
+        self.assertEqual(self.links[130][1:5], [1403, 3, 1405, 0])
+        self.assertEqual(self.links[136][1:5], [1408, 0, 1409, 0])
+        self.assertEqual(self.links[137][1:5], [1403, 5, 1410, 0])
+        self.assertEqual(self.links[138][1:5], [1408, 0, 1403, 4])
+        self.assertEqual(self.nodes[1403]['inputs'][4]['name'], 'image_json')
         self.assertEqual(self.links[131][1:5], [1403, 4, 1406, 0])
         self.assertEqual(self.links[116][1:5], [1403, 0, 1151, 1])
         self.assertEqual(self.links[129][1:5], [1403, 1, 1151, 2])

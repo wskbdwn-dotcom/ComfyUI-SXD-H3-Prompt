@@ -21,10 +21,12 @@ class SXDPoseRoute:
             'original_request': ('STRING', {'forceInput': True}),
             'general_rules': ('STRING', {'forceInput': True}),
             'pose_rules': ('STRING', {'forceInput': True}),
+            'image_json': ('STRING', {'forceInput': True}),
         }}
 
-    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING')
-    RETURN_NAMES = ('system_prompt', 'user_prompt', 'status', 'extraction', 'matches')
+    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING')
+    RETURN_NAMES = ('system_prompt', 'user_prompt', 'status', 'extraction', 'matches',
+                    'support_choice', 'image_state')
     FUNCTION = 'run'
     CATEGORY = 'SXD/Gemma Image'
     DESCRIPTION = '按接触记录从已上传的姿势库取一条。匹配列表和提取结果始终输出；没有可选取条目就拦住后面的扩写。'
@@ -33,14 +35,15 @@ class SXDPoseRoute:
     def IS_CHANGED(cls, **kwargs):
         return pose_route.library_token(pose_route.STORE)
 
-    def run(self, contact_json, original_request, general_rules, pose_rules):
+    def run(self, contact_json, original_request, general_rules, pose_rules, image_json):
         result = pose_route.prepare(
-            contact_json, original_request, general_rules, pose_rules, pose_route.STORE)
+            contact_json, original_request, general_rules, pose_rules, pose_route.STORE, image_json)
         if result['ok']:
             system, user = result['system'], result['user']
         else:
             system = user = _blocker(result['status'])
-        return system, user, result['status'], result['extraction'], result['matches']
+        return (system, user, result['status'], result['extraction'], result['matches'],
+                result['support'], result['image_state'])
 
 
 def register_pose_routes():
