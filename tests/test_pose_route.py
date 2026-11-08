@@ -69,16 +69,54 @@ class LibraryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.write(Path(tmp), [{
                 'id': 'pose_test', 'name': '测试', 'alias': '双脚夹住',
-                'usable_for_selection': True, 'pose_sentence': '摆法已写明。足接触阴茎。',
+                'usable_for_selection': True, 'source_tags': ['足交'],
+                'pose_sentence': '女人头朝前，胸背对男人，腰直，胯朝前，臀贴着男人，大腿伸直，膝盖伸直，双脚着地，站立。足接触阴茎。',
+                'camera': '镜头在两人身体的一侧。',
             }])
             result = self.ask(tmp)
         self.assertTrue(result['ok'])
         self.assertIn('不要另选姿势', result['system'])
         self.assertIn('不得改支撑', result['user'])
-        self.assertIn('摆法已写明。足接触阴茎。', result['user'])
+        self.assertIn('双脚着地，站立。足接触阴茎。', result['user'])
+        self.assertIn('镜头：\n镜头在两人身体的一侧。', result['user'])
+        row = json.loads(result['matches'])[0]
+        self.assertEqual(row['camera'], '镜头在两人身体的一侧。')
+        self.assertEqual(row['source_tags'], ['足交'])
+        self.assertEqual(row['contact'], '足接触阴茎')
+        self.assertEqual(row['has_image'], False)
+        self.assertEqual(row['image_url'], '')
+        self.assertEqual(row['slots']['头'], '头朝前')
+        self.assertEqual(row['slots']['胸'], '背对对方')
+        self.assertEqual(row['slots']['腰'], '腰直')
+        self.assertEqual(row['slots']['胯'], '胯朝前')
+        self.assertEqual(row['slots']['臀'], '')
+        self.assertEqual(row['slots']['大腿'], '大腿伸直')
+        self.assertEqual(row['slots']['膝盖'], '膝盖伸直')
+        self.assertEqual(row['slots']['脚'], '脚着地')
+        self.assertIn({'field': '接触', 'query': '足接触阴茎', 'pose': '足接触阴茎', 'points': 60}, row['breakdown'])
         self.assertIn('保持衣服', result['user'])
         self.assertIn('pose_test', result['status'])
         self.assertIn('pose_test', result['matches'])
+
+    def test_contact_comes_from_source_tags(self):
+        self.assertEqual(route.contact_from(['肛交', '阴道性交'], '阴茎进入阴道。'), '阴茎进入阴道')
+        self.assertEqual(route.contact_from(['阴道性交', '肛交'], '只进入肛门。'), '只进入肛门')
+        self.assertEqual(route.contact_from(['肛交'], ''), '只进入肛门')
+        self.assertEqual(route.contact_from(['足交'], ''), '足接触阴茎')
+        self.assertEqual(route.contact_from(['69式', '口爱', '舔阴', '阴茎口交'], ''), '互相口爱')
+        self.assertEqual(route.contact_from(['口爱', '阴茎口交'], ''), '嘴接触阴茎')
+        self.assertEqual(route.contact_from(['口爱', '舔阴'], ''), '嘴接触阴部')
+        self.assertEqual(route.contact_from(['口爱', '舔阴', '阴茎口交'], ''), '')
+        self.assertEqual(route.contact_from(['自慰', '阴道性交'], ''), '')
+        self.assertEqual(route.contact_from(None, '阴茎进入阴道。'), '')
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [{
+                'id': 'pose_sentence_only', 'usable_for_selection': True,
+                'pose_sentence': '阴茎进入阴道。',
+            }])
+            missed = self.ask(tmp, dict(POSE, contacts=['阴茎进入阴道']))
+        self.assertFalse(missed['ok'])
+        self.assertIn('没有定稿姿势', missed['status'])
 
     def test_unusable_and_missing_entries_stop_but_keep_the_list(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -97,14 +135,15 @@ class LibraryTests(unittest.TestCase):
     def test_finalized_entries_rank_by_score_without_a_manual_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.write(Path(tmp), [
-                {'id': 'pose_a', 'number': 8, 'usable_for_selection': True,
+                {'id': 'pose_a', 'number': 8, 'usable_for_selection': True, 'source_tags': ['足交'],
                  'pose_sentence': '女人头转向他。足接触阴茎。', 'image_check': {'status': 'conflict'}},
-                {'id': 'pose_b', 'number': 3, 'usable_for_selection': True,
+                {'id': 'pose_b', 'number': 3, 'usable_for_selection': True, 'source_tags': ['足交'],
                  'pose_sentence': '另一条。足接触阴茎。'},
             ])
             numbered = self.ask(tmp)
             self.assertTrue(numbered['ok'])
             self.assertIn('pose_b', numbered['status'])
+            self.assertIn('（这条没有镜头。不要自行补镜头。）', numbered['user'])
             headed = self.ask(tmp, request='头转向他，保持衣服')
             self.assertTrue(headed['ok'])
             self.assertIn('pose_a', headed['status'])
@@ -131,9 +170,9 @@ class LibraryTests(unittest.TestCase):
         image = {'支撑': '跪', '姿势已准备': False, '事实': ['女人跪在画面里。']}
         with tempfile.TemporaryDirectory() as tmp:
             self.write(Path(tmp), [
-                {'id': 'pose_stand', 'number': 1, 'usable_for_selection': True,
+                {'id': 'pose_stand', 'number': 1, 'usable_for_selection': True, 'source_tags': ['足交'],
                  'pose_sentence': '女人站着。足接触阴茎。'},
-                {'id': 'pose_kneel', 'number': 9, 'usable_for_selection': True,
+                {'id': 'pose_kneel', 'number': 9, 'usable_for_selection': True, 'source_tags': ['足交'],
                  'pose_sentence': '女人头转向他，跪着。足接触阴茎。',
                  'image_check': {'status': 'conflict'}},
             ])
@@ -185,6 +224,7 @@ class PoseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.nodes[1408]['widgets_values'][0], 'image_support')
         self.assertEqual(self.nodes[1407]['widgets_values'][0],
                          (ROOT / 'workflows/qwen/image-support-rules.txt').read_text())
+        self.assertIn('脚被裁掉也是站', self.nodes[1407]['widgets_values'][0])
         self.assertEqual(lookup['type'], 'SXDPoseRoute')
         self.assertEqual(expand['widgets_values'][0], 'prompt')
         self.assertEqual(self.nodes[1400]['widgets_values'][0], self.rules)

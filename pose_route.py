@@ -300,21 +300,40 @@ def choose_support(user_posture, image=None):
     return {'支撑': img, '来源': '图片', '直接适配': False, '备选全部支撑': False, '说明': message}
 
 
-def contacts_in_sentence(sentence):
-    if not isinstance(sentence, str):
-        return []
-    found = []
-    for label in CONTACTS:
-        if label == '只进入肛门' and ('进入肛门' in sentence or '只进入肛门' in sentence):
-            found.append(label)
-        elif label == '阴茎进入阴道' and (
-                '阴茎进入阴道' in sentence or ('阴道' in sentence and ('进入' in sentence or '浅入' in sentence) and '肛门' not in sentence)):
-            found.append(label)
-        elif label == '手指或玩具接触自己的阴蒂' and '阴蒂' in sentence and ('手指' in sentence or '玩具' in sentence):
-            found.append(label)
-        elif label in sentence:
-            found.append(label)
-    return found
+def contact_from(tags, sentence):
+    """One contact class from source tags. Mixed kinds stay empty. The sentence only splits anal from vaginal."""
+    if not isinstance(tags, list):
+        tags = []
+    found = {item.strip() for item in tags if isinstance(item, str) and item.strip()}
+    penetrative = '阴道性交' in found or '肛交' in found
+    oral = bool(found & {'口爱', '阴茎口交', '舔阴', '舔肛', '69式'})
+    foot = '足交' in found
+    solo = '自慰' in found
+    if sum(bool(item) for item in (penetrative, oral, foot, solo)) != 1:
+        return ''
+    if solo:
+        return '手指或玩具接触自己的阴蒂'
+    if foot:
+        return '足接触阴茎'
+    if '69式' in found:
+        return '互相口爱'
+    if oral:
+        penis = '阴茎口交' in found
+        vulva = '舔阴' in found
+        anus = '舔肛' in found
+        if penis and not vulva and not anus:
+            return '嘴接触阴茎'
+        if vulva and not penis and not anus:
+            return '嘴接触阴部'
+        return ''
+    text = sentence if isinstance(sentence, str) else ''
+    if '肛门' in text and '阴道' not in text:
+        return '只进入肛门'
+    if '阴道性交' in found:
+        return '阴茎进入阴道'
+    if '肛交' in found:
+        return '只进入肛门'
+    return ''
 
 
 def _by_length(table):
@@ -331,6 +350,12 @@ HEAD_CLASSES = _by_length(tuple(
     for phrase in HEAD_PHRASES
     if phrase.replace('她', '女人').replace('他', '男人') != phrase
 ))
+WAIST_TABLE = _by_length(tuple((phrase, phrase) for phrase in WAIST_PHRASES))
+HIP_TABLE = _by_length(tuple((phrase, phrase) for phrase in HIP_PHRASES))
+BUTT_TABLE = _by_length(tuple((phrase, phrase) for phrase in BUTT_PHRASES))
+THIGH_TABLE = _by_length(tuple((phrase, phrase) for phrase in THIGH_PHRASES))
+KNEE_TABLE = _by_length(tuple((phrase, phrase) for phrase in KNEE_PHRASES))
+FOOT_TABLE = _by_length(tuple((phrase, phrase) for phrase in FOOT_PHRASES))
 
 
 def _first(text, table):
@@ -369,14 +394,30 @@ def _posture_fits(query, pose):
     return query == '坐' and pose == '坐在对方身上'
 
 
+def _woman_slots(woman):
+    """Closed phrases in the woman's span. A phrase that is not in the table stays empty."""
+    return {
+        '头': _first(woman, HEAD_CLASSES),
+        '胸': _first(woman, CHEST_PHRASES),
+        '腰': _first(woman, WAIST_TABLE),
+        '胯': _first(woman, HIP_TABLE),
+        '臀': _first(woman, BUTT_TABLE),
+        '大腿': _first(woman, THIGH_TABLE),
+        '膝盖': _first(woman, KNEE_TABLE),
+        '脚': _first(woman, FOOT_TABLE),
+    }
+
+
 def _entry_labels(sentence):
     woman, man = _person_spans(sentence)
+    slots = _woman_slots(woman)
     return {
-        'woman_chest': _first(woman, CHEST_PHRASES),
+        'woman_chest': slots['胸'],
         'man_chest': _first(man, CHEST_PHRASES),
         'posture': _first(woman, POSTURE_PHRASES),
         'axis': _axis(sentence),
-        'head': _first(woman, HEAD_CLASSES),
+        'head': slots['头'],
+        'slots': slots,
     }
 
 
@@ -420,19 +461,33 @@ def _stated_match(labels, entry):
     return True
 
 
-def _score(query, labels, entry):
-    points = WEIGHT_CONTACT if query['contacts'] else 0
-    if labels['woman_chest']:
-        points += WEIGHT_WOMAN_CHEST if entry['woman_chest'] == labels['woman_chest'] else 0
-    if labels['man_chest']:
-        points += WEIGHT_MAN_CHEST if entry['man_chest'] == labels['man_chest'] else 0
+def _breakdown(query, labels, entry):
+    """One line per non-empty query field. A mismatch scores 0 and does not subtract."""
+    contact = query['contacts'][0] if len(query.get('contacts') or []) == 1 else ''
+    parts = []
+
+    def add(field, query_value, pose_value, weight, matched=None):
+        if not query_value:
+            return
+        if matched is None:
+            matched = query_value == pose_value
+        parts.append({'field': field, 'query': query_value, 'pose': pose_value,
+                      'points': weight if matched else 0})
+
+    add('接触', contact, entry['contact'], WEIGHT_CONTACT)
+    add('女方胸', labels['woman_chest'], entry['woman_chest'], WEIGHT_WOMAN_CHEST)
+    add('男方胸', labels['man_chest'], entry['man_chest'], WEIGHT_MAN_CHEST)
     if labels['posture']:
-        points += WEIGHT_POSTURE if _posture_fits(labels['posture'], entry['posture']) else 0
-    if labels['axis']:
-        points += WEIGHT_AXIS if entry['axis'] == labels['axis'] else 0
-    if labels['head']:
-        points += WEIGHT_HEAD if entry['head'] == labels['head'] else 0
-    return points
+        add('支撑', labels['posture'], entry['posture'], WEIGHT_POSTURE,
+            _posture_fits(labels['posture'], entry['posture']))
+    add('轴线', labels['axis'], entry['axis'], WEIGHT_AXIS)
+    add('头', labels['head'], entry['head'], WEIGHT_HEAD)
+    return parts
+
+
+def _score(query, labels, entry):
+    entry['breakdown'] = _breakdown(query, labels, entry)
+    return sum(part['points'] for part in entry['breakdown'])
 
 
 def load_library(directory):
@@ -449,6 +504,11 @@ def load_library(directory):
         if not isinstance(data, dict) or not data.get('id'):
             raise PoseStop('姿势条目缺少 id：' + file.name)
         sentence = data.get('pose_sentence') if isinstance(data.get('pose_sentence'), str) else ''
+        camera = data.get('camera') if isinstance(data.get('camera'), str) else ''
+        tags = data.get('source_tags') if isinstance(data.get('source_tags'), list) else []
+        source_tags = [item.strip() for item in tags if isinstance(item, str) and item.strip()]
+        source_image = data.get('source_image') if isinstance(data.get('source_image'), str) else ''
+        contact = contact_from(source_tags, sentence)
         number = data.get('number')
         if type(number) is not int:
             number = 10**9
@@ -458,8 +518,13 @@ def load_library(directory):
             'name': data.get('name') if isinstance(data.get('name'), str) else '',
             'alias': data.get('alias') if isinstance(data.get('alias'), str) else '',
             'usable': data.get('usable_for_selection') is True and bool(sentence.strip()),
-            'contacts': contacts_in_sentence(sentence),
+            'source_tags': source_tags,
+            'source_image': source_image.strip(),
+            'contact': contact,
+            'contacts': [contact] if contact else [],
             'pose_sentence': sentence.strip(),
+            'camera': camera.strip(),
+            'breakdown': [],
             **_entry_labels(sentence),
         })
     if not entries:
@@ -475,14 +540,36 @@ def library_token(directory):
     return str([(item.name, item.stat().st_mtime_ns, item.stat().st_size) for item in files])
 
 
+def _has_image(entry):
+    """True only when this entry's own source image is a file on this machine."""
+    path = entry.get('source_image') or ''
+    ident = entry.get('id') or ''
+    if not path or not ident or any(token in ident for token in ('/', '\\', '..')):
+        return False
+    file = Path(path)
+    return file.is_file() and file.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
+
+
 def _rows(entries):
     return [{
         'id': entry['id'], 'number': entry['number'], 'name': entry['name'], 'alias': entry['alias'],
+        'source_tags': entry.get('source_tags', []),
+        'has_image': _has_image(entry), 'image_url': '',
         'usable': entry['usable'], 'score': entry.get('score', 0),
-        'contacts': entry['contacts'], 'woman_chest': entry['woman_chest'], 'man_chest': entry['man_chest'],
+        'breakdown': entry.get('breakdown', []),
+        'contact': entry['contact'], 'contacts': entry['contacts'],
+        'woman_chest': entry['woman_chest'], 'man_chest': entry['man_chest'],
         'posture': entry['posture'], 'axis': entry['axis'], 'head': entry['head'],
-        'pose_sentence': entry['pose_sentence'],
+        'slots': entry['slots'],
+        'pose_sentence': entry['pose_sentence'], 'camera': entry['camera'],
     } for entry in entries]
+
+
+def _camera_line(entry):
+    camera = entry.get('camera', '').strip()
+    if not camera:
+        return '（这条没有镜头。不要自行补镜头。）'
+    return camera
 
 
 def _rank_key(item):
@@ -532,13 +619,15 @@ def lookup(entries, query, request='', labels=None, choice=None):
         entry = hits[0]
         if not entry['usable']:
             return None, f'查无此条：{entry["id"]} 还不是定稿。已停止，不自由扩写。', []
-        if query['contacts'] and set(entry['contacts']) != set(query['contacts']):
+        if query['contacts'] and entry['contact'] not in query['contacts']:
             return None, f'查无此条：{entry["id"]} 完成不了要求的接触。已停止，不自由扩写。', _rows(hits)
         entry['score'] = _score(query, labels, entry)
         return entry, f'交合：{entry["id"]} {entry["alias"] or entry["name"]}，得分 {entry["score"]}', _rows(hits)
     if not query['contacts']:
         return None, '查无此条：没有点名，也没有可匹配的接触。已停止，不自由扩写。', []
-    usable = [entry for entry in entries if entry['usable'] and set(entry['contacts']) == set(query['contacts'])]
+    if len(query['contacts']) != 1:
+        return None, '查无此条：一次只能匹配一种接触。已停止，不自由扩写。', []
+    usable = [entry for entry in entries if entry['usable'] and entry['contact'] == query['contacts'][0]]
     if not usable:
         return None, '查无此条：没有定稿姿势能完成这个接触。已停止，不自由扩写。', []
     passed = []
@@ -600,7 +689,9 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
                 'extraction': extraction, 'matches': shown, 'support': support, 'image_state': image_state}
     user = (original_request.rstrip()
             + '\n\n已取定姿势。下面的摆法必须原样写入提示词，不得改支撑、站位、接触和镜头：\n'
-            + entry['pose_sentence'])
+            + entry['pose_sentence']
+            + '\n镜头：\n'
+            + _camera_line(entry))
     return {'ok': True, 'system': pose_rules, 'user': user, 'status': status,
             'extraction': extraction, 'matches': shown, 'support': support, 'image_state': image_state}
 
