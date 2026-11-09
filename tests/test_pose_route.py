@@ -2,6 +2,7 @@
 import io
 import json
 from pathlib import Path
+from PIL import Image
 import sys
 import tempfile
 import unittest
@@ -185,7 +186,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(json.loads(result['image_state'])['事实'], ['女人跪在画面里。'])
         self.assertIn('pose_kneel', result['status'])
 
-    def test_zip_replaces_saved_json_and_rejects_images(self):
+    def test_zip_keeps_pose_images_and_rejects_unmatched_ones(self):
         def packed(files):
             blob = io.BytesIO()
             with zipfile.ZipFile(blob, 'w') as archive:
@@ -196,15 +197,42 @@ class LibraryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp)
             first = json.dumps([{'id': 'pose_one', 'pose_sentence': '足接触阴茎。'}])
-            self.assertEqual(route.install_zip(packed({'list.json': first}), store), 1)
-            self.assertTrue((store / 'pose_one.json').is_file())
+            self.assertEqual(route.install_zip(packed({'list.json': first, 'pose_one.png': self.picture()}), store), 1)
+            saved = json.loads((store / 'pose_one.json').read_text())
+            self.assertTrue(Path(saved['source_image']).is_file())
+            self.assertEqual(Path(saved['source_image']).name, 'pose_one.png')
             second = json.dumps({'id': 'pose_two', 'pose_sentence': '嘴接触阴茎。'})
             self.assertEqual(route.install_zip(packed({'again.json': second}), store), 1)
             self.assertFalse((store / 'pose_one.json').exists())
+            self.assertFalse((store / 'images' / 'pose_one.png').exists())
             self.assertTrue((store / 'pose_two.json').is_file())
             with self.assertRaises(ValueError):
-                route.install_zip(packed({'picture.png': 'not-an-image'}), store)
+                route.install_zip(packed({'picture.png': self.picture()}), store)
             self.assertTrue((store / 'pose_two.json').is_file())
+            with self.assertRaises(ValueError):
+                route.install_zip(packed({
+                    'pose_two.json': second,
+                    'picture.png': self.picture(),
+                }), store)
+
+    def picture(self):
+        blob = io.BytesIO()
+        Image.new('RGB', (4, 4), (10, 20, 30)).save(blob, format='PNG')
+        return blob.getvalue()
+
+    def test_selected_pose_image_is_named_as_reference_two(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            picture = folder / 'pose.png'
+            Image.new('RGB', (4, 4), (1, 2, 3)).save(picture)
+            self.write(folder, [{
+                'id': 'pose_kneel', 'number': 1, 'usable_for_selection': True, 'source_tags': ['足交'],
+                'pose_sentence': '女人跪着。足接触阴茎。', 'source_image': str(picture),
+            }])
+            result = self.ask(folder)
+        self.assertTrue(result['ok'])
+        self.assertIn('参考图2', result['user'])
+        self.assertEqual(result['pose_image'], str(picture.resolve()))
 
 
 class PoseWorkflowTests(unittest.TestCase):
@@ -239,6 +267,12 @@ class PoseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.links[131][1:5], [1403, 4, 1406, 0])
         self.assertEqual(self.links[116][1:5], [1403, 0, 1151, 1])
         self.assertEqual(self.links[129][1:5], [1403, 1, 1151, 2])
+        self.assertEqual(self.nodes[1403]['outputs'][7]['name'], 'pose_image')
+        self.assertEqual(self.links[66][1:5], [1403, 7, 14, 2])
+        self.assertEqual(self.links[91][1:5], [1403, 7, 1151, 5])
+        self.assertEqual(self.links[139][1:5], [1337, 0, 1403, 5])
+        self.assertEqual(self.nodes[1403]['inputs'][5]['name'], 'image2')
         self.assertNotIn(31, self.links)
         self.assertNotIn(32, self.links)
         self.assertIn('不要另选姿势', route.POSE_RULES)
+        self.assertIn('参考图2', route.POSE_RULES)

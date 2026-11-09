@@ -19,11 +19,14 @@ CONTACTS = (
 POSE_RULES = """你是图像编辑指令写作者。只输出简体中文，一行 JSON，且只有一个非空字符串字段 prompt。不要 Markdown，不要解释。
 
 用户消息里有一条已经取定的姿势。提示词必须原样保留这条里的承重、胸的朝向、站位、接触和镜头。不要另选姿势，不要改这些身体关系。
-从参考图和原始编辑要求里补上身份、衣服和场景。不要编造姿势库里没有写出的支撑或机位。
+图1是人物参考。从图1和原始编辑要求里补上身份、衣服和场景。不要编造姿势库里没有写出的支撑或机位。
+若消息写明图2是姿势参考，提示词里要写出参考图2的姿势，让生图按图2的身体摆法画。不要把图2里的脸、发型、衣服或房间写成图1人物的身份。
 """
 STORE = Path(__file__).resolve().parent / 'pose_data' / 'entries'
-MAX_ZIP_BYTES = 32 * 1024 * 1024
+IMAGE_DIR = 'images'
+MAX_ZIP_BYTES = 128 * 1024 * 1024
 MAX_JSON_BYTES = 2 * 1024 * 1024
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 IMAGE_SUFFIXES = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif'}
 WEIGHT_CONTACT = 60
 WEIGHT_WOMAN_CHEST = 50
@@ -537,7 +540,9 @@ def library_token(directory):
     if not path.is_dir():
         return 'missing'
     files = sorted(item for item in path.glob('pose_*.json') if item.is_file())
-    return str([(item.name, item.stat().st_mtime_ns, item.stat().st_size) for item in files])
+    images = sorted(item for item in (path / IMAGE_DIR).glob('*') if item.is_file()) if (path / IMAGE_DIR).is_dir() else []
+    listed = files + images
+    return str([(item.name, item.stat().st_mtime_ns, item.stat().st_size) for item in listed])
 
 
 def _has_image(entry):
@@ -570,6 +575,24 @@ def _camera_line(entry):
     if not camera:
         return '（这条没有镜头。不要自行补镜头。）'
     return camera
+
+
+def _pose_user(original, entry):
+    if _has_image(entry):
+        instruction = '图2是这条姿势的参考图，生图时接在参考图2。提示词必须写明身体姿势参考图2，并原样写入下面的摆法，不得改支撑、站位、接触和镜头：'
+    else:
+        instruction = '下面的摆法必须原样写入提示词，不得改支撑、站位、接触和镜头：'
+    return (original.rstrip()
+            + '\n\n已取定姿势。' + instruction + '\n'
+            + entry['pose_sentence']
+            + '\n镜头：\n'
+            + _camera_line(entry))
+
+
+def _pose_image(entry):
+    if entry and _has_image(entry):
+        return str(Path(entry['source_image']).resolve())
+    return ''
 
 
 def _rank_key(item):
@@ -674,26 +697,24 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
     if query['route'] == 'general':
         return {'ok': True, 'system': general_rules, 'user': original_request,
                 'status': '不交合：沿用通用扩写规则', 'extraction': extraction, 'matches': '[]',
-                'support': support, 'image_state': image_state}
+                'support': support, 'image_state': image_state, 'pose_image': ''}
     if not isinstance(pose_rules, str) or not pose_rules.strip():
         raise ValueError('交合扩写规则不能为空。')
     try:
         entries = load_library(library_dir)
     except PoseStop as error:
         return {'ok': False, 'system': '', 'user': '', 'status': str(error),
-                'extraction': extraction, 'matches': '[]', 'support': support, 'image_state': image_state}
+                'extraction': extraction, 'matches': '[]', 'support': support,
+                'image_state': image_state, 'pose_image': ''}
     entry, status, rows = lookup(entries, query, original_request, labels, choice)
     shown = json.dumps(rows, ensure_ascii=False, indent=2)
     if entry is None:
         return {'ok': False, 'system': '', 'user': '', 'status': status,
-                'extraction': extraction, 'matches': shown, 'support': support, 'image_state': image_state}
-    user = (original_request.rstrip()
-            + '\n\n已取定姿势。下面的摆法必须原样写入提示词，不得改支撑、站位、接触和镜头：\n'
-            + entry['pose_sentence']
-            + '\n镜头：\n'
-            + _camera_line(entry))
-    return {'ok': True, 'system': pose_rules, 'user': user, 'status': status,
-            'extraction': extraction, 'matches': shown, 'support': support, 'image_state': image_state}
+                'extraction': extraction, 'matches': shown, 'support': support,
+                'image_state': image_state, 'pose_image': ''}
+    return {'ok': True, 'system': pose_rules, 'user': _pose_user(original_request, entry),
+            'status': status, 'extraction': extraction, 'matches': shown, 'support': support,
+            'image_state': image_state, 'pose_image': _pose_image(entry)}
 
 
 def parse_pose_input(text):
@@ -705,17 +726,53 @@ def parse_pose_input(text):
     return parse_contact(text)
 
 
+def _zip_parts(name):
+    text = str(name).replace('\\', '/').strip('/')
+    parts = tuple(Path(text).parts)
+    if not text or not parts or any(part in ('', '.', '..') for part in parts):
+        raise ValueError('压缩包路径不合法：' + str(name))
+    return parts
+
+
+def _match_image(pose_id, images):
+    hits = []
+    for key in images:
+        parts = key.split('/')
+        stem = Path(parts[-1]).stem
+        if stem == pose_id or (len(parts) >= 2 and parts[-2] == pose_id and stem == 'image'):
+            hits.append(key)
+    if len(hits) > 1:
+        raise ValueError(pose_id + ' 有多张姿势图。')
+    return hits[0] if hits else ''
+
+
+def _verify_image(raw, filename):
+    from PIL import Image
+    try:
+        with Image.open(io.BytesIO(raw)) as picture:
+            picture.verify()
+        with Image.open(io.BytesIO(raw)) as picture:
+            picture.load()
+            if min(picture.size) < 1:
+                raise ValueError
+    except ValueError:
+        raise
+    except Exception as error:
+        raise ValueError(filename + ' 不是可读的姿势图。') from error
+
+
 def install_zip(payload, store=STORE):
-    """Replace the saved pose JSON with the text entries inside one zip."""
+    """Replace the saved pose library with the JSON and pose images inside one zip."""
     if not isinstance(payload, (bytes, bytearray)) or not payload:
         raise ValueError('没有读到压缩包。')
     if len(payload) > MAX_ZIP_BYTES:
-        raise ValueError('压缩包超过 32MB。')
+        raise ValueError('压缩包超过 128MB。')
     try:
         archive = zipfile.ZipFile(io.BytesIO(payload))
     except zipfile.BadZipFile as error:
         raise ValueError('这不是 zip 压缩包。') from error
     collected = []
+    images = {}
     with archive:
         files = [info for info in archive.infolist() if not info.is_dir()]
         if not files:
@@ -723,12 +780,21 @@ def install_zip(payload, store=STORE):
         if len(files) > 5000:
             raise ValueError('压缩包里的文件超过 5000 个。')
         for info in files:
-            filename = Path(info.filename).name
+            parts = _zip_parts(info.filename)
+            if parts[0] == '__MACOSX' or any(part.startswith('.') for part in parts):
+                continue
+            filename = parts[-1]
             suffix = Path(filename).suffix.lower()
+            key = '/'.join(parts)
             if suffix in IMAGE_SUFFIXES:
-                raise ValueError('压缩包里有图片。只上传文本 JSON。')
-            if suffix != '.json' or not filename or filename.startswith('.'):
-                raise ValueError('只接受 .json 文件：' + info.filename)
+                if info.file_size > MAX_IMAGE_BYTES:
+                    raise ValueError(filename + ' 超过 8MB。')
+                if key in images:
+                    raise ValueError('重复图片：' + key)
+                images[key] = info
+                continue
+            if suffix != '.json' or not filename:
+                raise ValueError('只接受姿势 JSON 和姿势图片：' + info.filename)
             if info.file_size > MAX_JSON_BYTES:
                 raise ValueError(filename + ' 超过 2MB。')
             try:
@@ -745,18 +811,75 @@ def install_zip(payload, store=STORE):
                 if not pose_id.replace('_', '').isalnum():
                     raise ValueError('id 只能包含字母、数字和下划线：' + pose_id)
                 collected.append((pose_id, item))
-    if not collected:
-        raise ValueError('压缩包里没有姿势条目。')
-    seen = set()
-    for pose_id, _item in collected:
-        if pose_id in seen:
-            raise ValueError('重复 id：' + pose_id)
-        seen.add(pose_id)
+        if not collected:
+            raise ValueError('压缩包里没有姿势条目。')
+        seen = set()
+        for pose_id, _item in collected:
+            if pose_id in seen:
+                raise ValueError('重复 id：' + pose_id)
+            seen.add(pose_id)
+        bound = []
+        used = set()
+        for pose_id, item in collected:
+            key = _match_image(pose_id, images)
+            if key:
+                if key in used:
+                    raise ValueError('一张图对应了多条姿势：' + key)
+                used.add(key)
+            bound.append((pose_id, item, key))
+        orphans = [key for key in images if key not in used]
+        if orphans:
+            raise ValueError('图片没有对应的姿势：' + orphans[0])
+        stored = []
+        for pose_id, item, key in bound:
+            raw = b''
+            suffix = ''
+            if key:
+                raw = archive.read(images[key])
+                suffix = Path(key).suffix.lower()
+                _verify_image(raw, Path(key).name)
+            stored.append((pose_id, item, raw, suffix))
     store.mkdir(parents=True, exist_ok=True)
+    image_dir = store / IMAGE_DIR
     for old in store.glob('pose_*.json'):
         old.unlink()
-    for pose_id, item in collected:
+    if image_dir.exists():
+        for old in image_dir.iterdir():
+            if old.is_file():
+                old.unlink()
+    image_dir.mkdir(parents=True, exist_ok=True)
+    for pose_id, item, raw, suffix in stored:
+        if raw:
+            path = image_dir / f'{pose_id}{suffix}'
+            path.write_bytes(raw)
+            item['source_image'] = str(path.resolve())
         filename = pose_id if pose_id.startswith('pose_') else 'pose_' + pose_id
         (store / f'{filename}.json').write_text(
             json.dumps(item, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    return len(collected)
+    return len(stored)
+
+
+def pack_library(library_dir, destination):
+    """Write a zip of pose JSON plus each entry's own pose image."""
+    library = Path(library_dir)
+    files = sorted(item for item in library.glob('pose_*.json') if item.is_file())
+    if not files:
+        raise ValueError('姿势库目录里没有条目：' + str(library))
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    image_count = 0
+    with zipfile.ZipFile(destination, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        for file in files:
+            data = json.loads(file.read_text(encoding='utf-8'))
+            if not isinstance(data, dict) or not isinstance(data.get('id'), str) or not data['id'].strip():
+                raise ValueError(file.name + ' 缺少 id。')
+            pose_id = data['id'].strip()
+            source = data.get('source_image') if isinstance(data.get('source_image'), str) else ''
+            image = Path(source) if source else None
+            if image and image.is_file() and image.suffix.lower() in IMAGE_SUFFIXES:
+                arcname = pose_id + image.suffix.lower()
+                data['source_image'] = arcname
+                archive.write(image, arcname=arcname)
+                image_count += 1
+            archive.writestr(pose_id + '.json', json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+    return len(files), image_count

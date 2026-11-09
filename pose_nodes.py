@@ -13,6 +13,18 @@ def _blocker(message):
     return ExecutionBlocker(message)
 
 
+def load_pose_image(path):
+    """Load one installed pose image as a ComfyUI IMAGE tensor."""
+    import numpy as np
+    import torch
+    from PIL import Image
+    picture = Image.open(path).convert('RGB')
+    array = np.asarray(picture, dtype=np.float32) / 255.0
+    if array.ndim != 3 or array.shape[2] != 3 or min(array.shape[:2]) < 1:
+        raise ValueError('姿势图无法作为参考图2：' + str(path))
+    return torch.from_numpy(np.ascontiguousarray(array)).unsqueeze(0)
+
+
 class SXDPoseRoute:
     @classmethod
     def INPUT_TYPES(cls):
@@ -22,28 +34,32 @@ class SXDPoseRoute:
             'general_rules': ('STRING', {'forceInput': True}),
             'pose_rules': ('STRING', {'forceInput': True}),
             'image_json': ('STRING', {'forceInput': True}),
+        }, 'optional': {
+            'image2': ('IMAGE',),
         }}
 
-    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING')
+    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'IMAGE')
     RETURN_NAMES = ('system_prompt', 'user_prompt', 'status', 'extraction', 'matches',
-                    'support_choice', 'image_state')
+                    'support_choice', 'image_state', 'pose_image')
     FUNCTION = 'run'
     CATEGORY = 'SXD/Gemma Image'
-    DESCRIPTION = '按接触记录从已上传的姿势库取一条。匹配列表和提取结果始终输出；没有可选取条目就拦住后面的扩写。'
+    DESCRIPTION = '按接触记录从已上传的姿势库取一条。取到姿势图时从 pose_image 输出，接到生图的参考图2。没有可选取条目就拦住后面的扩写。'
 
     @classmethod
     def IS_CHANGED(cls, **kwargs):
         return pose_route.library_token(pose_route.STORE)
 
-    def run(self, contact_json, original_request, general_rules, pose_rules, image_json):
+    def run(self, contact_json, original_request, general_rules, pose_rules, image_json, image2=None):
         result = pose_route.prepare(
             contact_json, original_request, general_rules, pose_rules, pose_route.STORE, image_json)
         if result['ok']:
             system, user = result['system'], result['user']
         else:
             system = user = _blocker(result['status'])
+        chosen = result.get('pose_image') or ''
+        pose_image = load_pose_image(chosen) if chosen else image2
         return (system, user, result['status'], result['extraction'], result['matches'],
-                result['support'], result['image_state'])
+                result['support'], result['image_state'], pose_image)
 
 
 def register_pose_routes():

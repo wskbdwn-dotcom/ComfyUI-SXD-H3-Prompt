@@ -13,7 +13,7 @@ app.registerExtension({
             picker.type = 'file';
             picker.accept = '.zip,application/zip';
             picker.hidden = true;
-            this.addWidget('button', '上传姿势 JSON 压缩包', '', () => {
+            this.addWidget('button', '上传姿势压缩包（含姿势图）', '', () => {
                 picker.value = '';
                 picker.click();
             });
