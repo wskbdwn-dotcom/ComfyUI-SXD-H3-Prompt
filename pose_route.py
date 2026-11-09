@@ -190,16 +190,27 @@ def _closed(text, phrases):
     return text if text in phrases else ''
 
 
+def _slot_text(value):
+    """A slot is one phrase. A one-item list is the same phrase, not a failure."""
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        texts = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+        return texts[0] if texts else ''
+    raise ValueError('身体槽必须是字符串。')
+
+
 def _slots(raw):
     if not isinstance(raw, dict):
         raise ValueError('body_parts 的每一方必须是对象。')
     slots = {}
     for name in SLOT_NAMES:
-        value = raw.get(name, '')
-        if value is None:
-            value = ''
-        if not isinstance(value, str):
-            raise ValueError('身体槽必须是字符串：' + name)
+        try:
+            value = _slot_text(raw.get(name, ''))
+        except ValueError:
+            raise ValueError('身体槽必须是字符串：' + name) from None
         if name == '胸':
             slots[name] = _closed(value, CLOSED_SLOTS['胸']) or _first(value, CHEST_PHRASES)
         elif name == '头':

@@ -186,6 +186,18 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(json.loads(result['image_state'])['事实'], ['女人跪在画面里。'])
         self.assertIn('pose_kneel', result['status'])
 
+    def test_a_one_item_slot_list_is_read_as_the_phrase(self):
+        document = {
+            '人数': 2, 'alias': '', '接触': '阴茎进入阴道', '支撑': '站', '轴线': '',
+            'body_parts': {
+                '女方': {'头': '', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': ['大腿抬起'], '膝盖': '', '脚': ''},
+                '男方': {'头': '', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': '', '膝盖': '', '脚': ''},
+            },
+        }
+        parsed = route.parse_extraction(dump(document))
+        self.assertEqual(parsed['document']['body_parts']['女方']['大腿'], '大腿抬起')
+        self.assertEqual(parsed['document']['支撑'], '站')
+
     def test_zip_keeps_pose_images_and_rejects_unmatched_ones(self):
         def packed(files):
             blob = io.BytesIO()
