@@ -19,6 +19,27 @@ def _cancel():
     throw_exception_if_processing_interrupted()
 
 
+def _final_text(text):
+    """Drop a thought channel. Plain prose may close with <channel|> and no opening tag."""
+    text = text.strip()
+    if text.startswith(': '):
+        text = text[2:].strip()
+    for opening, closing in (('<|channel>thought', '<channel|>'), ('<think>', '</think>')):
+        while text.startswith(opening):
+            end = text.find(closing, len(opening))
+            if end < 0:
+                raise GuardError('UNFINISHED_THINKING: 仅返回了思考内容。')
+            text = text[end + len(closing):].strip()
+    if not text.startswith(('{', '[')):
+        for closing in ('<channel|>', '</think>'):
+            if closing in text:
+                text = text.rsplit(closing, 1)[-1].strip()
+                break
+    if text.startswith('<|channel>final'):
+        text = text[len('<|channel>final'):].strip()
+    return text
+
+
 def _close(iterator):
     close = getattr(iterator, 'close', None)
     if close:
@@ -193,16 +214,7 @@ class Trace:
         raw = ''.join(self.raw).strip()
         content = ''.join(self.content).strip()
         text = raw if raw and (self.saw_native_thought or not any(self.reasoning)) else content
-        if text.startswith(': '):
-            text = text[2:].strip()
-        for opening, closing in (('<|channel>thought', '<channel|>'), ('<think>', '</think>')):
-            while text.startswith(opening):
-                end = text.find(closing, len(opening))
-                if end < 0:
-                    raise GuardError('UNFINISHED_THINKING: 仅返回了思考内容。')
-                text = text[end + len(closing):].strip()
-        if text.startswith('<|channel>final'):
-            text = text[len('<|channel>final'):].strip()
+        text = _final_text(text)
         if not text:
             raise GuardError('EMPTY_ANSWER: 未返回最终正文。')
         # Keep normal JSON parsing and schema validation in the existing workflow.

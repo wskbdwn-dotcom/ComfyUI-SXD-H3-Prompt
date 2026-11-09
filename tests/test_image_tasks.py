@@ -225,6 +225,16 @@ class ImageTraceTests(unittest.TestCase):
         answer=json.dumps({'prompt':'Write <think> on a sign. '+'Repeated long final caption intended for the image. '*30})
         self.assertEqual(self.collect(answer),answer)
 
+    def test_plain_thought_closed_by_channel_keeps_the_json(self):
+        body = ('{"人数": 2, "alias": "", "接触": "阴茎进入阴道", "支撑": "跪", '
+                '"轴线": "男方在女方身后", "body_parts": {"女方": {"头": "", "胸": "", '
+                '"腰": "", "胯": "", "臀": "", "大腿": "", "膝盖": "", "脚": ""}, '
+                '"男方": {"头": "", "胸": "", "腰": "", "胯": "", "臀": "", "大腿": "", '
+                '"膝盖": "", "脚": ""}}}')
+        thought = 'The user said kneeling from behind. Valid.'
+        self.assertEqual(self.collect(thought + '<channel|>' + body), body)
+        self.assertEqual(self.collect('earlier <channel|> still thinking <channel|>' + body), body)
+
     def test_separate_reasoning_is_not_final_text(self):
         self.assertEqual(self.collect('Brief reasoning.',separate=True),ANSWER)
 
