@@ -567,6 +567,16 @@ def _request_labels(text):
     }
 
 
+def _spoken_details(chunk):
+    """原话里的弯腰、翘臀先收成封闭词，再交给槽位。后仰仍是后仰。"""
+    if not any(word in chunk for word in ('后仰', '挺腰')):
+        for spoken, closed in (('弯下腰', '腰前折'), ('向前弯', '腰前折'), ('弯腰', '腰前折'), ('俯身', '腰前折')):
+            chunk = chunk.replace(spoken, closed)
+    for spoken, closed in (('翘起臀部', '臀抬起'), ('翘臀', '臀抬起')):
+        chunk = chunk.replace(spoken, closed)
+    return chunk
+
+
 def _request_details(text):
     """只把写在某人名字后面的腰、胯、臀、大腿、膝盖、脚算到这个人身上。"""
     parts = re.split(r'(男人|男方|女人|女方)', text or '')
@@ -574,12 +584,56 @@ def _request_details(text):
     index = 1
     while index + 1 < len(parts):
         name, chunk = parts[index], parts[index + 1]
+        chunk = _spoken_details(chunk)
         if name.startswith('女'):
             woman.append(chunk)
         else:
             man.append(chunk)
         index += 2
     return _detail_parts(_woman_slots(''.join(woman))), _detail_parts(_woman_slots(''.join(man)))
+
+
+def _apply_stated_request(labels, document, text):
+    """原话已经写明的支撑、朝向和腰臀，覆盖模型漏写或写反的项。"""
+    stated = _request_labels(text)
+    if stated.get('posture'):
+        labels['posture'] = stated['posture']
+        labels['woman_posture'] = stated['posture']
+    if stated.get('man_posture'):
+        labels['man_posture'] = stated['man_posture']
+    for key in ('woman_chest', 'man_chest', 'axis'):
+        if stated.get(key):
+            labels[key] = stated[key]
+    for side in ('woman_parts', 'man_parts'):
+        current = dict(labels.get(side) or {})
+        for name, value in (stated.get(side) or {}).items():
+            if value:
+                current[name] = value
+        labels[side] = current
+    if not isinstance(document, dict):
+        return
+    document['女方支撑'] = labels.get('woman_posture') or labels.get('posture') or ''
+    document['男方支撑'] = labels.get('man_posture') or ''
+    document['支撑'] = document['女方支撑']
+    if labels.get('axis'):
+        document['轴线'] = labels['axis']
+    parts = document.get('body_parts')
+    if not isinstance(parts, dict):
+        return
+    woman = parts.get('女方') if isinstance(parts.get('女方'), dict) else {}
+    man = parts.get('男方') if isinstance(parts.get('男方'), dict) else {}
+    parts['女方'] = woman
+    parts['男方'] = man
+    if labels.get('woman_chest'):
+        woman['胸'] = labels['woman_chest']
+    if labels.get('man_chest'):
+        man['胸'] = labels['man_chest']
+    for name, value in (labels.get('woman_parts') or {}).items():
+        if value:
+            woman[name] = value
+    for name, value in (labels.get('man_parts') or {}).items():
+        if value:
+            man[name] = value
 
 
 def _stated_match(labels, entry):
@@ -889,7 +943,8 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
         labels = {key: query[key] for key in (
             'woman_chest', 'man_chest', 'posture', 'woman_posture', 'man_posture', 'axis', 'head',
             'woman_parts', 'man_parts')}
-        choice = choose_support(query['posture'], image)
+        _apply_stated_request(labels, query['document'], original_request)
+        choice = choose_support(labels.get('woman_posture') or labels.get('posture'), image)
         extraction = json.dumps(query['document'], ensure_ascii=False, indent=2)
     else:
         labels = _request_labels(original_request)

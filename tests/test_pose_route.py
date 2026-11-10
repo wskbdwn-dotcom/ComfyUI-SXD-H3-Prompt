@@ -186,6 +186,35 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(json.loads(result['image_state'])['事实'], ['女人跪在画面里。'])
         self.assertIn('pose_kneel', result['status'])
 
+    def test_stated_standing_and_forward_bend_outrank_a_kneeling_man(self):
+        document = {
+            '人数': 2, 'alias': '', '接触': '阴茎进入阴道', '支撑': '站',
+            '女方支撑': '站', '男方支撑': '', '轴线': '男方在女人身后',
+            'body_parts': {
+                '女方': {'头': '', '胸': '', '腰': '腰后仰', '胯': '', '臀': '臀抬起', '大腿': '', '膝盖': '', '脚': ''},
+                '男方': {'头': '', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': '', '膝盖': '', '脚': ''},
+            },
+        }
+        request = '女人站立弯腰翘起臀部，男人站立从后面插入女人阴道'
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [
+                {'id': 'pose_kneel_man', 'number': 140, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人站着，腰直，臀抬起，背对男人。男人在女人身后跪下。阴茎进入阴道。'},
+                {'id': 'pose_stand_both', 'number': 200, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人站着，腰前折，臀抬起，背对男人。男人在女人身后站着。阴茎进入阴道。'},
+            ])
+            result = route.prepare(
+                dump(document), request, 'RULES', 'POSE RULES 不要另选姿势', tmp, '')
+        shown = json.loads(result['extraction'])
+        self.assertEqual(shown['男方支撑'], '站')
+        self.assertEqual(shown['女方支撑'], '站')
+        self.assertEqual(shown['body_parts']['女方']['腰'], '腰前折')
+        self.assertEqual(shown['body_parts']['女方']['臀'], '臀抬起')
+        self.assertEqual(shown['body_parts']['女方']['胸'], '背对对方')
+        self.assertIn('pose_stand_both', result['status'])
+
     def test_a_one_item_slot_list_is_read_as_the_phrase(self):
         document = {
             '人数': 2, 'alias': '', '接触': '阴茎进入阴道', '支撑': '站', '轴线': '',
@@ -275,23 +304,69 @@ class PoseWorkflowTests(unittest.TestCase):
         self.assertEqual(self.nodes[1403]['inputs'][3]['name'], 'pose_rules')
         self.assertEqual(self.links[126][1:5], [1402, 0, 1403, 0])
         self.assertEqual(self.links[130][1:5], [1403, 3, 1405, 0])
-        self.assertEqual(self.links[136][1:5], [1408, 0, 1409, 0])
         self.assertEqual(self.links[137][1:5], [1403, 5, 1410, 0])
-        self.assertEqual(self.links[138][1:5], [1408, 0, 1403, 4])
         self.assertEqual(self.nodes[1403]['inputs'][4]['name'], 'image_json')
         self.assertEqual(self.links[131][1:5], [1403, 4, 1406, 0])
-        self.assertEqual(self.links[116][1:5], [1403, 0, 1151, 1])
-        self.assertEqual(self.links[129][1:5], [1403, 1, 1151, 2])
+        self.assertTrue(self._via_if('读取图片支撑', '读图开关 · 开则识别支撑', '姿势查库 · 取一条或停止', 4))
+        self.assertTrue(self._via_if('读取图片支撑', '读图开关 · 开则识别支撑', '图里的事实', 0))
+        self.assertTrue(self._via_set('姿势查库 · 取一条或停止', 0, '查库系统提示词', '自定义规则 · Gemma 直接扩写', 1))
+        self.assertTrue(self._via_set('姿势查库 · 取一条或停止', 1, '查库用户提示词', '自定义规则 · Gemma 直接扩写', 2))
         self.assertEqual(self.nodes[1403]['outputs'][7]['name'], 'pose_image')
-        self.assertEqual(self.links[66][1:5], [1403, 7, 14, 2])
+        self.assertTrue(self._via_set('姿势查库 · 取一条或停止', 7, '姿势图', '原 Qwen 2.1 编码 · 接收增强提示词', 2))
+        self.assertTrue(self._via_set('姿势查库 · 取一条或停止', 7, '姿势图', '自定义规则 · Gemma 直接扩写', 5))
         self.assertEqual(self.nodes[1412]['type'], 'PreviewImage')
         self.assertEqual(self.nodes[1412]['title'], '选中的姿势图')
         self.assertEqual(self.links[140][1:5], [1403, 7, 1412, 0])
-        self.assertEqual(self.links[91][1:5], [1403, 7, 1151, 5])
         self.assertEqual(self.links[139][1:5], [1337, 0, 1403, 5])
+        self.assertEqual(self._widget('读图识别支撑'), True)
+        self.assertEqual(self._widget('畸形检查'), True)
+        self.assertIn('"enable_thinking": false', self.nodes[1150]['widgets_values'][0])
+        self.assertEqual(self.nodes[1127]['widgets_values'][0], 840)
+        self.assertEqual(self._cross_group_links(), [])
         self.assertEqual(self.nodes[1403]['inputs'][5]['name'], 'image2')
         self.assertNotIn(31, self.links)
         self.assertNotIn(32, self.links)
         self.assertIn('不要另选姿势', route.POSE_RULES)
         self.assertIn('图1是女人的形象。', route.POSE_RULES)
         self.assertIn('保持图1的背景', route.POSE_RULES)
+
+    def _by_title(self, title):
+        found = [node for node in self.workflow['nodes'] if node.get('title') == title]
+        self.assertEqual(len(found), 1, title)
+        return found[0]
+
+    def _widget(self, title):
+        return self._by_title(title)['widgets_values'][0]
+
+    def _via_set(self, src_title, src_slot, name, dst_title, dst_slot):
+        setter = next(node for node in self.workflow['nodes']
+                      if node['type'] == 'SetNode' and node['widgets_values'][0] == name
+                      and self.links[node['inputs'][0]['link']][1:3] == [self._by_title(src_title)['id'], src_slot])
+        getter_ids = {node['id'] for node in self.workflow['nodes']
+                      if node['type'] == 'GetNode' and node['widgets_values'][0] == name}
+        dst = self._by_title(dst_title)
+        origin = self.links[dst['inputs'][dst_slot]['link']][1]
+        return setter is not None and origin in getter_ids
+
+    def _via_if(self, src_title, switch_title, dst_title, dst_slot):
+        switch = self._by_title(switch_title)
+        src = self._by_title(src_title)
+        dst = self._by_title(dst_title)
+        true_from = self.links[switch['inputs'][1]['link']][1]
+        out_to = self.links[dst['inputs'][dst_slot]['link']][1]
+        return true_from == src['id'] and out_to == switch['id']
+
+    def _cross_group_links(self):
+        def group_of(node):
+            x, y = node['pos']
+            hits = []
+            for group in self.workflow['groups']:
+                left, top, width, height = group['bounding']
+                if left <= x <= left + width and top <= y <= top + height:
+                    hits.append(group['title'])
+            return hits
+        crossed = []
+        for link in self.workflow['links']:
+            if group_of(self.nodes[link[1]]) != group_of(self.nodes[link[3]]):
+                crossed.append(link[0])
+        return crossed

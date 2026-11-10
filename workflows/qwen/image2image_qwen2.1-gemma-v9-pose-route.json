@@ -1,8 +1,8 @@
 {
   "id": "3b288cf2-589b-4e96-ad8b-a5a909d76ad9",
   "revision": 0,
-  "last_node_id": 1412,
-  "last_link_id": 140,
+  "last_node_id": 1439,
+  "last_link_id": 174,
   "nodes": [
     {
       "id": 10,
@@ -408,13 +408,13 @@
       },
       "widgets_values": [
         "",
-        1280,
-        1280
+        840,
+        840
       ],
       "widgets_values_named": {
         "in": "",
-        "width": 1280,
-        "height": 1280
+        "width": 840,
+        "height": 840
       }
     },
     {
@@ -500,13 +500,13 @@
       },
       "widgets_values": [
         "",
-        1280,
-        1280
+        840,
+        840
       ],
       "widgets_values_named": {
         "in": "",
-        "width": 1280,
-        "height": 1280
+        "width": 840,
+        "height": 840
       }
     },
     {
@@ -592,13 +592,13 @@
       },
       "widgets_values": [
         "",
-        1280,
-        1280
+        840,
+        840
       ],
       "widgets_values_named": {
         "in": "",
-        "width": 1280,
-        "height": 1280
+        "width": 840,
+        "height": 840
       }
     },
     {
@@ -679,8 +679,7 @@
           "type": "MODEL",
           "links": [
             3,
-            71,
-            109
+            71
           ]
         }
       ],
@@ -1121,13 +1120,13 @@
       },
       "widgets_values": [
         "",
-        1280,
-        1280
+        840,
+        840
       ],
       "widgets_values_named": {
         "in": "",
-        "width": 1280,
-        "height": 1280
+        "width": 840,
+        "height": 840
       }
     },
     {
@@ -1622,7 +1621,7 @@
           "name": "images.image_2",
           "shape": 7,
           "type": "IMAGE",
-          "link": 66,
+          "link": 158,
           "label": "参考图 2（姿势图）"
         },
         {
@@ -1717,12 +1716,12 @@
       "widgets_values": [
         "",
         "重复人物、额外肢体、肢体连接异常、人物融合。",
-        1280
+        840
       ],
       "widgets_values_named": {
         "prompt": "",
         "negative_prompt": "重复人物、额外肢体、肢体连接异常、人物融合。",
-        "resolution": 1280
+        "resolution": 840
       },
       "color": "#323",
       "bgcolor": "#535",
@@ -1784,11 +1783,11 @@
         }
       },
       "widgets_values": [
-        1280,
+        840,
         "fixed"
       ],
       "widgets_values_named": {
-        "value": 1280,
+        "value": 840,
         "fixed": "fixed"
       }
     },
@@ -2154,7 +2153,7 @@
         "Node name for S&R": "StringConstantMultiline"
       },
       "widgets_values": [
-        "{\n  \"model_path\": \"gemma-4-26b-a4b-it-heretic.q4_k_m.gguf\",\n  \"mmproj_path\": \"gemma-4-26B-A4B-it-heretic-mmproj.bf16.gguf\",\n  \"enable_thinking\": true,\n  \"max_tokens\": 8192,\n  \"n_ctx\": 32768,\n  \"n_gpu_layers\": -1,\n  \"temperature\": 1.0,\n  \"top_k\": 64,\n  \"top_p\": 0.95,\n  \"min_p\": 0.0,\n  \"repeat_penalty\": 1.08,\n  \"penalty_last_n\": 4096,\n  \"stop_on_repetition\": true,\n  \"max_images\": 4,\n  \"image_max_side\": 1024,\n  \"image_jpeg_quality\": 90\n}",
+        "{\n  \"model_path\": \"gemma-4-26b-a4b-it-heretic.q4_k_m.gguf\",\n  \"mmproj_path\": \"gemma-4-26B-A4B-it-heretic-mmproj.bf16.gguf\",\n  \"enable_thinking\": false,\n  \"max_tokens\": 8192,\n  \"n_ctx\": 32768,\n  \"n_gpu_layers\": -1,\n  \"temperature\": 1.0,\n  \"top_k\": 64,\n  \"top_p\": 0.95,\n  \"min_p\": 0.0,\n  \"repeat_penalty\": 1.08,\n  \"penalty_last_n\": 4096,\n  \"stop_on_repetition\": true,\n  \"max_images\": 4,\n  \"image_max_side\": 1024,\n  \"image_jpeg_quality\": 90\n}",
         false
       ]
     },
@@ -2181,9 +2180,7 @@
           "name": "STRING",
           "type": "STRING",
           "links": [
-            87,
-            117,
-            118
+            87
           ]
         }
       ],
@@ -2218,7 +2215,7 @@
           "name": "STRING",
           "type": "STRING",
           "links": [
-            115
+            151
           ]
         }
       ],
@@ -2291,12 +2288,12 @@
         {
           "name": "system_prompt_override",
           "type": "STRING",
-          "link": 116
+          "link": 154
         },
         {
           "name": "user_prompt",
           "type": "STRING",
-          "link": 129
+          "link": 156
         },
         {
           "name": "seed",
@@ -2311,7 +2308,7 @@
         {
           "name": "image2",
           "type": "IMAGE",
-          "link": 91
+          "link": 159
         },
         {
           "name": "image3",
@@ -2420,7 +2417,7 @@
           "name": "raw_output",
           "type": "STRING",
           "links": [
-            114
+            172
           ]
         }
       ],
@@ -2592,7 +2589,7 @@
           "name": "boolean",
           "type": "BOOLEAN",
           "links": [
-            99
+            168
           ]
         }
       ],
@@ -4025,7 +4022,8 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            77
+            77,
+            150
           ]
         }
       ],
@@ -4193,9 +4191,7 @@
           "name": "STRING",
           "type": "STRING",
           "links": [
-            83,
-            119,
-            134
+            83
           ]
         }
       ],
@@ -4266,9 +4262,7 @@
           "name": "INT",
           "type": "INT",
           "links": [
-            85,
-            120,
-            135
+            85
           ]
         }
       ],
@@ -4438,8 +4432,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            90,
-            121
+            90
           ]
         }
       ],
@@ -4456,8 +4449,8 @@
       "type": "GetNode",
       "title": "Get_参考图_2",
       "pos": [
-        4635,
-        395
+        3720,
+        -1600
       ],
       "size": [
         265,
@@ -4506,8 +4499,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            92,
-            123
+            92
           ]
         }
       ],
@@ -4540,8 +4532,7 @@
           "name": "IMAGE",
           "type": "IMAGE",
           "links": [
-            93,
-            124
+            93
           ]
         }
       ],
@@ -4747,7 +4738,7 @@
         {
           "name": "BOOLEAN",
           "type": "BOOLEAN",
-          "link": 99
+          "link": 170
         }
       ],
       "outputs": [
@@ -5067,7 +5058,7 @@
           "label": "模型",
           "name": "model",
           "type": "MODEL",
-          "link": 109
+          "link": 150
         }
       ],
       "outputs": [
@@ -5321,7 +5312,7 @@
         {
           "name": "raw_output",
           "type": "STRING",
-          "link": 114
+          "link": 174
         }
       ],
       "outputs": [
@@ -5368,7 +5359,7 @@
         "Node name for S&R": "StringConstantMultiline"
       },
       "widgets_values": [
-        "你只回复一个 JSON 对象，不要写 markdown，不要解释。\n用户没有说到的项保持空字符串。不要编造一整具身体。没写到的槽留空。\nJSON 只能有这些字段：人数、alias、接触、支撑、轴线、body_parts。\nbody_parts 只能有女方和男方。每方只能有头、胸、腰、胯、臀、大腿、膝盖、脚。每个槽是一个字符串，不能写成数组。\n不要看参考图。参考图的支撑由另一个读图步骤负责。\n插入没有写肛门，接触写成阴茎进入阴道。只写肛门、或写只进入肛门，接触写成只进入肛门。\n没有这些接触时，接触留空字符串。不要发明接触类别。\n从后面表示轴线为男方在女方身后，并且她的胸是背对对方。从后方、后入、在她身后也一样。\n头转向男方写入女方的头，值为头转向他，不是胸的朝向。不要因为转头改胸。\n抓头发和抽插不是槽。不要把它们写进任何槽。\n胸朝向她的背不是朝向对方。不要把附近的方向抄进空着的槽。\nalias 只有用户原话里点名了姿势库的别名时才原样填入，否则空字符串。不要自己起别名。\n人数：用户说了一个人填 1，两个人填 2。没说人数填 0。不要默认填 2。\n接触只能是：阴茎进入阴道、只进入肛门、嘴接触阴茎、嘴接触阴部、互相口爱、足接触阴茎、手指或玩具接触自己的阴蒂，或空字符串。\n女方和男方的胸只能是：朝上、朝下、朝向对方、背对对方、朝向她的背、朝向他的背，或空字符串。\n支撑只能是：站、跪、扒、仰躺、侧卧、坐、坐在对方身上，或空字符串。用户说趴、趴着，写成扒。用户说坐着、坐姿，写成坐。用户说坐在他身上，写成坐在对方身上。\n轴线只能是：男方在女方身后，或空字符串。用户没说从后面就留空，不要自己补轴线。\n头只能是：头朝向他的骨盆、头朝向她的骨盆、头朝向他的头、头朝向她的脸、头朝向他的胯、头朝向她的胯、头转向他、头转向她、头朝向他、头朝向她、头后仰、头低下、头朝上、头朝下、头朝前，或空字符串。\n腰只能是：腰略后仰、腰前折、腰后仰、腰侧扭、腰直，或空字符串。\n胯只能是：胯朝向他的脸、胯朝向她的脸、胯朝向对方、胯朝向他、胯朝向她、胯转向一侧、胯朝上、胯朝前，或空字符串。\n臀只能是：臀朝向他的脸、臀朝向她的脸、臀坐在他身上、臀坐在她身上、臀承在水平承重面上、臀朝向他、臀朝向她、臀抬起，或空字符串。\n大腿只能是：大腿分开、大腿并拢、大腿伸直、大腿抬起，或空字符串。\n膝盖只能是：膝盖跪在水平承重面上、膝盖弯曲、膝盖伸直、膝盖着地，或空字符串。\n脚只能是：脚着地、脚抬起、脚并拢，或空字符串。\n",
+        "你只回复一个 JSON 对象，不要写 markdown，不要解释。\n用户没有说到的项保持空字符串。不要编造一整具身体。没写到的槽留空。\nJSON 只能有这些字段：人数、alias、接触、女方支撑、男方支撑、轴线、body_parts。\n女方支撑只记女人自己怎么承重，男方支撑只记男人自己怎么承重。男人跪着、趴下，不要写入女方支撑。没写到的一方留空字符串。\nbody_parts 只能有女方和男方。每方只能有头、胸、腰、胯、臀、大腿、膝盖、脚。每个槽是一个字符串，不能写成数组。\n不要看参考图。参考图的支撑由另一个读图步骤负责。\n插入没有写肛门，接触写成阴茎进入阴道。只写肛门、或写只进入肛门，接触写成只进入肛门。\n没有这些接触时，接触留空字符串。不要发明接触类别。\n从后面表示轴线为男方在女方身后，并且她的胸是背对对方。从后方、后入、在她身后也一样。\n头转向男方写入女方的头，值为头转向他，不是胸的朝向。不要因为转头改胸。\n抓头发和抽插不是槽。不要把它们写进任何槽。\n胸朝向她的背不是朝向对方。不要把附近的方向抄进空着的槽。\nalias 只有用户原话里点名了姿势库的别名时才原样填入，否则空字符串。不要自己起别名。\n人数：用户说了一个人填 1，两个人填 2。没说人数填 0。不要默认填 2。\n接触只能是：阴茎进入阴道、只进入肛门、嘴接触阴茎、嘴接触阴部、互相口爱、足接触阴茎、手指或玩具接触自己的阴蒂，或空字符串。\n女方和男方的胸只能是：朝上、朝下、朝向对方、背对对方、朝向她的背、朝向他的背，或空字符串。\n女方支撑和男方支撑只能是：站、跪、扒、仰躺、侧卧、坐、坐在对方身上、被抱起，或空字符串。用户说站立、站着，写成站，写在说出这个动作的那个人身上。女人站立只写女方支撑，男人站立只写男方支撑。用户说趴、趴着，写成扒。用户说坐着、坐姿，写成坐。用户说坐在他身上，写成坐在对方身上。同一人又跪又趴时，支撑写成跪。人被抱起、被抱起来、被抱离地面，或脚离开地面、由对方的手托着，支撑写成被抱起。把对方抱起来的人不要写成被抱起；他脚着地就写成站。\n轴线只能是：男方在女方身后，或空字符串。用户没说从后面就留空，不要自己补轴线。\n头只能是：头朝向他的骨盆、头朝向她的骨盆、头朝向他的头、头朝向她的脸、头朝向他的胯、头朝向她的胯、头转向他、头转向她、头朝向他、头朝向她、头后仰、头低下、头朝上、头朝下、头朝前，或空字符串。\n腰只能是：腰略后仰、腰前折、腰后仰、腰侧扭、腰直，或空字符串。弯腰、弯下腰、向前弯、俯身写成腰前折。翘起臀部、翘臀写成臀抬起。这些都不是腰后仰。只有原话写了后仰或挺腰向后，才写腰后仰。\n胯只能是：胯朝向他的脸、胯朝向她的脸、胯朝向对方、胯朝向他、胯朝向她、胯转向一侧、胯朝上、胯朝前，或空字符串。\n臀只能是：臀朝向他的脸、臀朝向她的脸、臀坐在他身上、臀坐在她身上、臀承在水平承重面上、臀朝向他、臀朝向她、臀抬起，或空字符串。\n大腿只能是：大腿分开、大腿并拢、大腿伸直、大腿抬起，或空字符串。\n膝盖只能是：膝盖跪在水平承重面上、膝盖弯曲、膝盖伸直、膝盖着地，或空字符串。\n脚只能是：脚着地、脚抬起、脚并拢，或空字符串。\n",
         false
       ]
     },
@@ -5428,7 +5419,7 @@
         {
           "name": "config_override",
           "type": "STRING",
-          "link": 119
+          "link": 141
         },
         {
           "name": "system_prompt_override",
@@ -5438,12 +5429,12 @@
         {
           "name": "user_prompt",
           "type": "STRING",
-          "link": 118
+          "link": 149
         },
         {
           "name": "seed",
           "type": "INT",
-          "link": 120
+          "link": 143
         },
         {
           "name": "image",
@@ -5515,12 +5506,12 @@
         {
           "name": "original_request",
           "type": "STRING",
-          "link": 117
+          "link": 148
         },
         {
           "name": "general_rules",
           "type": "STRING",
-          "link": 115
+          "link": 152
         },
         {
           "name": "pose_rules",
@@ -5530,7 +5521,7 @@
         {
           "name": "image_json",
           "type": "STRING",
-          "link": 138
+          "link": 165
         },
         {
           "name": "image2",
@@ -5543,14 +5534,14 @@
           "name": "system_prompt",
           "type": "STRING",
           "links": [
-            116
+            153
           ]
         },
         {
           "name": "user_prompt",
           "type": "STRING",
           "links": [
-            129
+            155
           ]
         },
         {
@@ -5590,9 +5581,8 @@
           "name": "pose_image",
           "type": "IMAGE",
           "links": [
-            66,
-            91,
-            140
+            140,
+            157
           ]
         }
       ],
@@ -5783,7 +5773,7 @@
         {
           "name": "config_override",
           "type": "STRING",
-          "link": 134
+          "link": 142
         },
         {
           "name": "system_prompt_override",
@@ -5798,12 +5788,12 @@
         {
           "name": "seed",
           "type": "INT",
-          "link": 135
+          "link": 144
         },
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 121
+          "link": 145
         },
         {
           "name": "image2",
@@ -5813,12 +5803,12 @@
         {
           "name": "image3",
           "type": "IMAGE",
-          "link": 123
+          "link": 146
         },
         {
           "name": "image4",
           "type": "IMAGE",
-          "link": 124
+          "link": 147
         }
       ],
       "outputs": [
@@ -5826,8 +5816,7 @@
           "name": "text",
           "type": "STRING",
           "links": [
-            136,
-            138
+            163
           ]
         },
         {
@@ -5866,7 +5855,7 @@
         {
           "name": "anything",
           "type": "*",
-          "link": 136
+          "link": 166
         }
       ],
       "outputs": [],
@@ -5942,6 +5931,981 @@
       },
       "widgets_values": [],
       "title": "选中的姿势图"
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_Gemma配置_JSON",
+      "pos": [
+        3720,
+        -1880
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            141,
+            142
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "Gemma配置_JSON"
+      ],
+      "id": 1413,
+      "order": 116
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_Gemma种子",
+      "pos": [
+        3720,
+        -1810
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "links": [
+            143,
+            144
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "Gemma种子"
+      ],
+      "id": 1414,
+      "order": 117
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_参考图_1",
+      "pos": [
+        3720,
+        -1740
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            145
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "参考图_1"
+      ],
+      "id": 1415,
+      "order": 118
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_参考图_3",
+      "pos": [
+        3720,
+        -1530
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            146
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "参考图_3"
+      ],
+      "id": 1416,
+      "order": 119
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_参考图_4",
+      "pos": [
+        3720,
+        -1460
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            147
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "参考图_4"
+      ],
+      "id": 1417,
+      "order": 120
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_原始提示词",
+      "pos": [
+        3720,
+        -1390
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            148,
+            149
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "原始提示词"
+      ],
+      "id": 1418,
+      "order": 121
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_通用扩写规则",
+      "pos": [
+        5680,
+        1180
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "link": 151
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "通用扩写规则"
+      },
+      "widgets_values": [
+        "通用扩写规则"
+      ],
+      "id": 1419,
+      "order": 122
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_通用扩写规则",
+      "pos": [
+        3720,
+        -1320
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            152
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "通用扩写规则"
+      ],
+      "id": 1420,
+      "order": 123
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_查库系统提示词",
+      "pos": [
+        3720,
+        -980
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "link": 153
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "查库系统提示词"
+      },
+      "widgets_values": [
+        "查库系统提示词"
+      ],
+      "id": 1421,
+      "order": 124
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_查库系统提示词",
+      "pos": [
+        7620,
+        120
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            154
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "查库系统提示词"
+      ],
+      "id": 1422,
+      "order": 125
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_查库用户提示词",
+      "pos": [
+        3720,
+        -900
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "link": 155
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "查库用户提示词"
+      },
+      "widgets_values": [
+        "查库用户提示词"
+      ],
+      "id": 1423,
+      "order": 126
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_查库用户提示词",
+      "pos": [
+        7620,
+        200
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            156
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "查库用户提示词"
+      ],
+      "id": 1424,
+      "order": 127
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_姿势图",
+      "pos": [
+        3720,
+        -820
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "link": 157
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "姿势图"
+      },
+      "widgets_values": [
+        "姿势图"
+      ],
+      "id": 1425,
+      "order": 128
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_姿势图",
+      "pos": [
+        35,
+        3400
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            158
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "姿势图"
+      ],
+      "id": 1426,
+      "order": 129
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_姿势图",
+      "pos": [
+        7620,
+        280
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            159
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "姿势图"
+      ],
+      "id": 1427,
+      "order": 130
+    },
+    {
+      "type": "easy boolean",
+      "title": "读图识别支撑",
+      "pos": [
+        40,
+        -2660
+      ],
+      "size": [
+        280,
+        58
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "links": [
+            160
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy boolean"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1428,
+      "order": 131
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_读图识别支撑",
+      "pos": [
+        400,
+        -2660
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "link": 160
+        }
+      ],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "读图识别支撑"
+      },
+      "widgets_values": [
+        "读图识别支撑"
+      ],
+      "id": 1429,
+      "order": 132
+    },
+    {
+      "type": "easy boolean",
+      "title": "畸形检查",
+      "pos": [
+        40,
+        -2480
+      ],
+      "size": [
+        280,
+        58
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "links": [
+            161
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy boolean"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1430,
+      "order": 133
+    },
+    {
+      "type": "SetNode",
+      "title": "Set_畸形检查",
+      "pos": [
+        400,
+        -2480
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "link": 161
+        }
+      ],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes",
+        "previousName": "畸形检查"
+      },
+      "widgets_values": [
+        "畸形检查"
+      ],
+      "id": 1431,
+      "order": 134
+    },
+    {
+      "type": "StringConstant",
+      "title": "不读图",
+      "pos": [
+        3720,
+        -740
+      ],
+      "size": [
+        280,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            164
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StringConstant"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "id": 1432,
+      "order": 135
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_读图识别支撑",
+      "pos": [
+        3720,
+        -660
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": [
+            162
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "读图识别支撑"
+      ],
+      "id": 1433,
+      "order": 136
+    },
+    {
+      "type": "easy ifElse",
+      "title": "读图开关 · 开则识别支撑",
+      "pos": [
+        3720,
+        -580
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 162,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 163
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 164
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            165,
+            166
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1434,
+      "order": 137
+    },
+    {
+      "type": "GetNode",
+      "title": "Get_畸形检查",
+      "pos": [
+        4160,
+        2460
+      ],
+      "size": [
+        265,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "links": [
+            167,
+            171
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "GetNode",
+        "aux_id": "kijai/ComfyUI-KJNodes"
+      },
+      "widgets_values": [
+        "畸形检查"
+      ],
+      "id": 1435,
+      "order": 138
+    },
+    {
+      "type": "easy boolean",
+      "title": "关闭检查时不修复",
+      "pos": [
+        4160,
+        2540
+      ],
+      "size": [
+        280,
+        58
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "links": [
+            169
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy boolean"
+      },
+      "widgets_values": [
+        false
+      ],
+      "id": 1436,
+      "order": 139
+    },
+    {
+      "type": "easy ifElse",
+      "title": "畸形检查开关 · 关则直接用首次成图",
+      "pos": [
+        3000,
+        3600
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 167,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 168
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 169
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            170
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1437,
+      "order": 140
+    },
+    {
+      "type": "StringConstant",
+      "title": "已关闭畸形检查",
+      "pos": [
+        3000,
+        3800
+      ],
+      "size": [
+        280,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            173
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StringConstant"
+      },
+      "widgets_values": [
+        "已关闭畸形检查"
+      ],
+      "id": 1438,
+      "order": 141
+    },
+    {
+      "type": "easy ifElse",
+      "title": "畸形检查开关 · 实时输出",
+      "pos": [
+        3450,
+        3820
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 171,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 172
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 173
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            174
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1439,
+      "order": 142
     }
   ],
   "links": [
@@ -6426,14 +7390,6 @@
       "IMAGE"
     ],
     [
-      66,
-      1403,
-      7,
-      14,
-      2,
-      "IMAGE"
-    ],
-    [
       67,
       1107,
       0,
@@ -6626,14 +7582,6 @@
       "IMAGE"
     ],
     [
-      91,
-      1403,
-      7,
-      1151,
-      5,
-      "IMAGE"
-    ],
-    [
       92,
       1338,
       0,
@@ -6688,14 +7636,6 @@
       1153,
       1,
       "IMAGE"
-    ],
-    [
-      99,
-      1208,
-      0,
-      1345,
-      0,
-      "BOOLEAN"
     ],
     [
       100,
@@ -6770,14 +7710,6 @@
       "STRING"
     ],
     [
-      109,
-      74,
-      0,
-      1354,
-      0,
-      "MODEL"
-    ],
-    [
       110,
       1115,
       0,
@@ -6810,91 +7742,11 @@
       "STRING"
     ],
     [
-      114,
-      1152,
-      1,
-      1359,
-      0,
-      "STRING"
-    ],
-    [
-      115,
-      1201,
-      0,
-      1403,
-      2,
-      "STRING"
-    ],
-    [
-      116,
-      1403,
-      0,
-      1151,
-      1,
-      "STRING"
-    ],
-    [
-      117,
-      1200,
-      0,
-      1403,
-      1,
-      "STRING"
-    ],
-    [
-      118,
-      1200,
-      0,
-      1402,
-      2,
-      "STRING"
-    ],
-    [
-      119,
-      1329,
-      0,
-      1402,
-      0,
-      "STRING"
-    ],
-    [
-      120,
-      1331,
-      0,
-      1402,
-      3,
-      "INT"
-    ],
-    [
-      121,
-      1336,
-      0,
-      1408,
-      4,
-      "IMAGE"
-    ],
-    [
       122,
       1337,
       0,
       1408,
       5,
-      "IMAGE"
-    ],
-    [
-      123,
-      1338,
-      0,
-      1408,
-      6,
-      "IMAGE"
-    ],
-    [
-      124,
-      1339,
-      0,
-      1408,
-      7,
       "IMAGE"
     ],
     [
@@ -6930,14 +7782,6 @@
       "*"
     ],
     [
-      129,
-      1403,
-      1,
-      1151,
-      2,
-      "STRING"
-    ],
-    [
       130,
       1403,
       3,
@@ -6970,43 +7814,11 @@
       "STRING"
     ],
     [
-      134,
-      1329,
-      0,
-      1408,
-      0,
-      "STRING"
-    ],
-    [
-      135,
-      1331,
-      0,
-      1408,
-      3,
-      "INT"
-    ],
-    [
-      136,
-      1408,
-      0,
-      1409,
-      0,
-      "STRING"
-    ],
-    [
       137,
       1403,
       5,
       1410,
       0,
-      "STRING"
-    ],
-    [
-      138,
-      1408,
-      0,
-      1403,
-      4,
       "STRING"
     ],
     [
@@ -7024,6 +7836,278 @@
       1412,
       0,
       "IMAGE"
+    ],
+    [
+      141,
+      1413,
+      0,
+      1402,
+      0,
+      "STRING"
+    ],
+    [
+      142,
+      1413,
+      0,
+      1408,
+      0,
+      "STRING"
+    ],
+    [
+      143,
+      1414,
+      0,
+      1402,
+      3,
+      "INT"
+    ],
+    [
+      144,
+      1414,
+      0,
+      1408,
+      3,
+      "INT"
+    ],
+    [
+      145,
+      1415,
+      0,
+      1408,
+      4,
+      "IMAGE"
+    ],
+    [
+      146,
+      1416,
+      0,
+      1408,
+      6,
+      "IMAGE"
+    ],
+    [
+      147,
+      1417,
+      0,
+      1408,
+      7,
+      "IMAGE"
+    ],
+    [
+      148,
+      1418,
+      0,
+      1403,
+      1,
+      "STRING"
+    ],
+    [
+      149,
+      1418,
+      0,
+      1402,
+      2,
+      "STRING"
+    ],
+    [
+      150,
+      1324,
+      0,
+      1354,
+      0,
+      "MODEL"
+    ],
+    [
+      151,
+      1201,
+      0,
+      1419,
+      0,
+      "STRING"
+    ],
+    [
+      152,
+      1420,
+      0,
+      1403,
+      2,
+      "STRING"
+    ],
+    [
+      153,
+      1403,
+      0,
+      1421,
+      0,
+      "STRING"
+    ],
+    [
+      154,
+      1422,
+      0,
+      1151,
+      1,
+      "STRING"
+    ],
+    [
+      155,
+      1403,
+      1,
+      1423,
+      0,
+      "STRING"
+    ],
+    [
+      156,
+      1424,
+      0,
+      1151,
+      2,
+      "STRING"
+    ],
+    [
+      157,
+      1403,
+      7,
+      1425,
+      0,
+      "IMAGE"
+    ],
+    [
+      158,
+      1426,
+      0,
+      14,
+      2,
+      "IMAGE"
+    ],
+    [
+      159,
+      1427,
+      0,
+      1151,
+      5,
+      "IMAGE"
+    ],
+    [
+      160,
+      1428,
+      0,
+      1429,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      161,
+      1430,
+      0,
+      1431,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      162,
+      1433,
+      0,
+      1434,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      163,
+      1408,
+      0,
+      1434,
+      1,
+      "STRING"
+    ],
+    [
+      164,
+      1432,
+      0,
+      1434,
+      2,
+      "STRING"
+    ],
+    [
+      165,
+      1434,
+      0,
+      1403,
+      4,
+      "STRING"
+    ],
+    [
+      166,
+      1434,
+      0,
+      1409,
+      0,
+      "STRING"
+    ],
+    [
+      167,
+      1435,
+      0,
+      1437,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      168,
+      1208,
+      0,
+      1437,
+      1,
+      "BOOLEAN"
+    ],
+    [
+      169,
+      1436,
+      0,
+      1437,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      170,
+      1437,
+      0,
+      1345,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      171,
+      1435,
+      0,
+      1439,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      172,
+      1152,
+      1,
+      1439,
+      1,
+      "STRING"
+    ],
+    [
+      173,
+      1438,
+      0,
+      1439,
+      2,
+      "STRING"
+    ],
+    [
+      174,
+      1439,
+      0,
+      1359,
+      0,
+      "STRING"
     ]
   ],
   "groups": [
@@ -7072,7 +8156,7 @@
       "bounding": [
         4600,
         0,
-        3000,
+        3600,
         2000
       ],
       "color": "#39775c",
@@ -7099,7 +8183,7 @@
         2300,
         2150,
         2200,
-        2000
+        2200
       ],
       "color": "#8a6d3b",
       "font_size": 28,
@@ -7128,6 +8212,19 @@
         2000
       ],
       "color": "#39775c",
+      "font_size": 28,
+      "flags": {}
+    },
+    {
+      "id": 208,
+      "title": "08 · 开关 · 读图支撑 / 畸形检查",
+      "bounding": [
+        0,
+        -2780,
+        1100,
+        620
+      ],
+      "color": "#6b5b3a",
       "font_size": 28,
       "flags": {}
     }
@@ -7492,8 +8589,8 @@
               "cnr_id": "comfyui-kjnodes"
             },
             "widgets_values": [
-              1280,
-              1280,
+              840,
+              840,
               "lanczos",
               "resize",
               "255, 255, 255",
@@ -7502,8 +8599,8 @@
               "cpu"
             ],
             "widgets_values_named": {
-              "width": 1280,
-              "height": 1280,
+              "width": 840,
+              "height": 840,
               "upscale_method": "lanczos",
               "keep_proportion": "resize",
               "pad_color": "255, 255, 255",
@@ -8029,8 +9126,8 @@
               "cnr_id": "comfyui-kjnodes"
             },
             "widgets_values": [
-              1280,
-              1280,
+              840,
+              840,
               "lanczos",
               "resize",
               "255, 255, 255",
@@ -8039,8 +9136,8 @@
               "cpu"
             ],
             "widgets_values_named": {
-              "width": 1280,
-              "height": 1280,
+              "width": 840,
+              "height": 840,
               "upscale_method": "lanczos",
               "keep_proportion": "resize",
               "pad_color": "255, 255, 255",
@@ -8566,8 +9663,8 @@
               "cnr_id": "comfyui-kjnodes"
             },
             "widgets_values": [
-              1280,
-              1280,
+              840,
+              840,
               "lanczos",
               "resize",
               "255, 255, 255",
@@ -8576,8 +9673,8 @@
               "cpu"
             ],
             "widgets_values_named": {
-              "width": 1280,
-              "height": 1280,
+              "width": 840,
+              "height": 840,
               "upscale_method": "lanczos",
               "keep_proportion": "resize",
               "pad_color": "255, 255, 255",
@@ -9103,8 +10200,8 @@
               "cnr_id": "comfyui-kjnodes"
             },
             "widgets_values": [
-              1280,
-              1280,
+              840,
+              840,
               "lanczos",
               "resize",
               "255, 255, 255",
@@ -9113,8 +10210,8 @@
               "cpu"
             ],
             "widgets_values_named": {
-              "width": 1280,
-              "height": 1280,
+              "width": 840,
+              "height": 840,
               "upscale_method": "lanczos",
               "keep_proportion": "resize",
               "pad_color": "255, 255, 255",
