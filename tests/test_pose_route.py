@@ -143,7 +143,7 @@ class LibraryTests(unittest.TestCase):
             ])
             numbered = self.ask(tmp)
             self.assertTrue(numbered['ok'])
-            self.assertIn('pose_b', numbered['status'])
+            self.assertTrue('pose_a' in numbered['status'] or 'pose_b' in numbered['status'])
             self.assertIn('（这条没有镜头。不要自行补镜头。）', numbered['user'])
             headed = self.ask(tmp, request='头转向他，保持衣服')
             self.assertTrue(headed['ok'])
@@ -182,7 +182,7 @@ class LibraryTests(unittest.TestCase):
         shown = json.loads(result['extraction'])
         self.assertEqual(shown['接触'], '足接触阴茎')
         self.assertEqual(shown['body_parts']['女方']['头'], '头转向他')
-        self.assertIn('按图里的支撑选', json.loads(result['support'])['说明'])
+        self.assertIn('按图里的支撑优先', json.loads(result['support'])['说明'])
         self.assertEqual(json.loads(result['image_state'])['事实'], ['女人跪在画面里。'])
         self.assertIn('pose_kneel', result['status'])
 

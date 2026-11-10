@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import io
 import json
+import random
+import re
 import zipfile
 from pathlib import Path
 
@@ -42,6 +44,7 @@ WEIGHT_MAN_CHEST = 30
 WEIGHT_POSTURE = 80
 WEIGHT_AXIS = 50
 WEIGHT_HEAD = 15
+DETAIL_WEIGHTS = (('腰', 8), ('大腿', 6), ('膝盖', 5), ('胯', 4), ('臀', 3), ('脚', 2))
 CHEST_PHRASES = (
     ('胸朝向她的背', '朝向她的背'),
     ('胸朝向他的背', '朝向他的背'),
@@ -60,6 +63,10 @@ CHEST_PHRASES = (
     ('胸朝下', '朝下'),
 )
 POSTURE_PHRASES = (
+    ('被抱离地面', '被抱起'),
+    ('被抱起来', '被抱起'),
+    ('抱离地面', '被抱起'),
+    ('被抱起', '被抱起'),
     ('坐在对方身上', '坐在对方身上'),
     ('坐在他身上', '坐在对方身上'),
     ('坐在她身上', '坐在对方身上'),
@@ -152,7 +159,7 @@ def parse_contact(text):
 
 
 SLOT_NAMES = ('头', '胸', '腰', '胯', '臀', '大腿', '膝盖', '脚')
-POSTURE_ORDER = ('站', '跪', '扒', '仰躺', '侧卧', '坐', '坐在对方身上')
+POSTURE_ORDER = ('站', '跪', '扒', '仰躺', '侧卧', '坐', '坐在对方身上', '被抱起')
 WAIST_PHRASES = ('腰略后仰', '腰前折', '腰后仰', '腰侧扭', '腰直')
 HIP_PHRASES = (
     '胯朝向他的脸', '胯朝向她的脸', '胯朝向女人的脸', '胯朝向男人的脸',
@@ -227,7 +234,10 @@ def parse_extraction(text):
     value = json.loads(text, object_pairs_hook=_unique)
     if not isinstance(value, dict):
         raise ValueError('原话提取必须是 JSON 对象。')
-    required = {'人数', 'alias', '接触', '支撑', '轴线', 'body_parts'}
+    split = '女方支撑' in value or '男方支撑' in value
+    required = {'人数', 'alias', '接触', '轴线', 'body_parts'}
+    if not split:
+        required.add('支撑')
     missing = required - set(value)
     if missing:
         raise ValueError('原话提取缺少字段：' + '、'.join(sorted(missing)))
@@ -239,7 +249,12 @@ def parse_extraction(text):
     if len(alias) > 80:
         raise ValueError('alias 超过 80 字。')
     contact = _closed(value['接触'] if isinstance(value['接触'], str) else '', CONTACTS)
-    posture = _first(value['支撑'] if isinstance(value['支撑'], str) else '', POSTURE_PHRASES)
+    if split:
+        posture = _first(value.get('女方支撑') if isinstance(value.get('女方支撑'), str) else '', POSTURE_PHRASES)
+        man_posture = _first(value.get('男方支撑') if isinstance(value.get('男方支撑'), str) else '', POSTURE_PHRASES)
+    else:
+        posture = _first(value.get('支撑') if isinstance(value.get('支撑'), str) else '', POSTURE_PHRASES)
+        man_posture = ''
     axis_text = value['轴线'] if isinstance(value['轴线'], str) else ''
     axis = '男方在女方身后' if _clean(axis_text) == '男方在女方身后' or _axis(axis_text) else ''
     parts = value['body_parts']
@@ -252,7 +267,8 @@ def parse_extraction(text):
     else:
         woman_chest = ''
     document = {
-        '人数': people, 'alias': alias, '接触': contact, '支撑': posture, '轴线': axis,
+        '人数': people, 'alias': alias, '接触': contact, '支撑': posture,
+        '女方支撑': posture, '男方支撑': man_posture, '轴线': axis,
         'body_parts': {'女方': woman, '男方': man},
     }
     route = 'pose' if contact else 'general'
@@ -260,7 +276,10 @@ def parse_extraction(text):
         'route': route, 'schema': 'extract', 'contacts': [contact] if contact else [],
         'named_pose': alias, 'people': people, 'vertical': None, 'face_visible': None,
         'woman_chest': woman_chest, 'man_chest': man['胸'], 'posture': posture,
-        'axis': axis, 'head': woman['头'], 'document': document,
+        'woman_posture': posture, 'man_posture': man_posture,
+        'axis': axis, 'head': woman['头'],
+        'woman_parts': _detail_parts(woman), 'man_parts': _detail_parts(man),
+        'document': document,
     }
 
 
@@ -308,11 +327,11 @@ def choose_support(user_posture, image=None):
         return {'支撑': img, '来源': '图片', '直接适配': True, '备选全部支撑': False,
                 '说明': '图里已经摆好这个姿势。原话没写支撑，按图里的姿势直接适配。'}
     if img == '站':
-        message = '原话没写支撑。图里的人站着，只选站立的姿势。'
+        message = '原话没写女方支撑。图里的人站着，这种支撑优先。'
     elif img == '坐':
-        message = '原话没写支撑。图里的人坐着，只选坐姿。'
+        message = '原话没写女方支撑。图里的人坐着，这种支撑优先。'
     elif img:
-        message = '原话没写支撑。按图里的支撑选。'
+        message = '原话没写女方支撑。按图里的支撑优先。'
     elif ready:
         return {'支撑': '', '来源': '图片', '直接适配': False, '备选全部支撑': True,
                 '说明': '图里像是已经在摆姿势，但看不出支撑。每种支撑都作备选。'}
@@ -430,16 +449,88 @@ def _woman_slots(woman):
     }
 
 
+def _person_posture(text):
+    """Library order. 跪趴 stays 扒, the same class the pose tree already uses."""
+    return _first(text, POSTURE_PHRASES)
+
+
+def _prompt_posture(text):
+    """A person who is kneeling and bent forward is kneeling. 趴 is the torso, not the support."""
+    if not text:
+        return ''
+    found = []
+    for phrase, label in POSTURE_PHRASES:
+        if phrase and phrase in text and label not in found:
+            found.append(label)
+    if len(found) > 1 and '扒' in found and any(label != '扒' for label in found):
+        found = [label for label in found if label != '扒']
+    return found[0] if found else ''
+
+
+def _request_postures(text):
+    """Woman and man supports from the clauses that name them. An unnamed support stays the woman's."""
+    parts = re.split(r'(男人|男方|女人|女方)', text or '')
+    woman = man = ''
+    index = 1
+    while index + 1 < len(parts):
+        name, chunk = parts[index], parts[index + 1]
+        posture = _prompt_posture(chunk)
+        if posture == '被抱起' and '被抱' not in chunk and not re.search(r'把(女人|女方|她|男人|男方)抱', chunk):
+            posture = _prompt_posture(re.sub(r'被抱起|被抱起来|被抱离地面|抱离地面', '', chunk))
+            if index >= 3 and parts[index - 2].startswith('女') and name.startswith('男'):
+                woman = woman or '被抱起'
+            elif index >= 3 and parts[index - 2].startswith('男') and name.startswith('女'):
+                man = man or '被抱起'
+        if name.startswith('女') and posture and not woman:
+            woman = posture
+        elif name.startswith('男') and posture and not man:
+            man = posture
+        index += 2
+    if not woman and not man:
+        woman = _prompt_posture(text)
+    return _correct_carried(text, woman, man)
+
+
+def _correct_carried(text, woman, man):
+    """被抱起写在被托起的人身上。动手抱、自己站着的人仍是站。"""
+    text = text or ''
+    woman_held = bool(re.search(
+        r'(女人|女方).{0,48}被[^。]{0,8}抱(起|起来|离地面)'
+        r'|被(男人|男方)抱离地面'
+        r'|(把|将)(女人|女方|她)抱(起|起来|离地面)',
+        text,
+    ))
+    man_held = bool(re.search(
+        r'(男人|男方).{0,48}被[^。]{0,8}抱(起|起来|离地面)'
+        r'|(把|将)(男人|男方)抱(起|起来|离地面)',
+        text,
+    ))
+    if woman_held:
+        woman = '被抱起'
+    if man_held:
+        man = '被抱起'
+    elif man == '被抱起':
+        man = ''
+    return woman, man
+
+
+def _detail_parts(slots):
+    return {name: (slots or {}).get(name, '') for name, _weight in DETAIL_WEIGHTS}
+
+
 def _entry_labels(sentence):
     woman, man = _person_spans(sentence)
     slots = _woman_slots(woman)
+    man_slots = _woman_slots(man)
     return {
         'woman_chest': slots['胸'],
         'man_chest': _first(man, CHEST_PHRASES),
-        'posture': _first(woman, POSTURE_PHRASES),
+        'posture': _person_posture(woman),
+        'man_posture': _person_posture(man),
         'axis': _axis(sentence),
         'head': slots['头'],
         'slots': slots,
+        'man_slots': man_slots,
     }
 
 
@@ -462,13 +553,33 @@ def _request_labels(text):
         woman_chest = '朝上'
     if axis and not woman_chest:
         woman_chest = '背对对方'
+    woman_posture, man_posture = _request_postures(text)
+    woman_parts, man_parts = _request_details(text)
     return {
         'woman_chest': woman_chest,
         'man_chest': man_chest,
-        'posture': _first(text, POSTURE_PHRASES),
+        'posture': woman_posture,
+        'man_posture': man_posture,
         'axis': axis,
         'head': _first(text, HEAD_CLASSES),
+        'woman_parts': woman_parts,
+        'man_parts': man_parts,
     }
+
+
+def _request_details(text):
+    """只把写在某人名字后面的腰、胯、臀、大腿、膝盖、脚算到这个人身上。"""
+    parts = re.split(r'(男人|男方|女人|女方)', text or '')
+    woman, man = [], []
+    index = 1
+    while index + 1 < len(parts):
+        name, chunk = parts[index], parts[index + 1]
+        if name.startswith('女'):
+            woman.append(chunk)
+        else:
+            man.append(chunk)
+        index += 2
+    return _detail_parts(_woman_slots(''.join(woman))), _detail_parts(_woman_slots(''.join(man)))
 
 
 def _stated_match(labels, entry):
@@ -477,8 +588,6 @@ def _stated_match(labels, entry):
     if labels['man_chest'] and entry['man_chest'] != labels['man_chest']:
         return False
     if labels['axis'] and entry['axis'] != labels['axis']:
-        return False
-    if labels['posture'] and not _posture_fits(labels['posture'], entry['posture']):
         return False
     return True
 
@@ -499,12 +608,25 @@ def _breakdown(query, labels, entry):
     add('接触', contact, entry['contact'], WEIGHT_CONTACT)
     add('女方胸', labels['woman_chest'], entry['woman_chest'], WEIGHT_WOMAN_CHEST)
     add('男方胸', labels['man_chest'], entry['man_chest'], WEIGHT_MAN_CHEST)
-    if labels['posture']:
-        add('支撑', labels['posture'], entry['posture'], WEIGHT_POSTURE,
-            _posture_fits(labels['posture'], entry['posture']))
+    woman_posture = labels.get('woman_posture') or labels.get('posture') or ''
+    if woman_posture:
+        add('女方支撑', woman_posture, entry['posture'], WEIGHT_POSTURE,
+            _posture_fits(woman_posture, entry['posture']))
+    if labels.get('man_posture'):
+        add('男方支撑', labels['man_posture'], entry.get('man_posture', ''), WEIGHT_POSTURE,
+            _posture_fits(labels['man_posture'], entry.get('man_posture', '')))
     add('轴线', labels['axis'], entry['axis'], WEIGHT_AXIS)
     add('头', labels['head'], entry['head'], WEIGHT_HEAD)
+    _add_details(add, '女方', labels.get('woman_parts'), entry.get('slots'))
+    _add_details(add, '男方', labels.get('man_parts'), entry.get('man_slots'))
     return parts
+
+
+def _add_details(add, side, query_parts, pose_slots):
+    query_parts = query_parts or {}
+    pose_slots = pose_slots or {}
+    for name, weight in DETAIL_WEIGHTS:
+        add(side + name, query_parts.get(name, ''), pose_slots.get(name, ''), weight)
 
 
 def _score(query, labels, entry):
@@ -625,9 +747,46 @@ def _pose_image(entry):
     return ''
 
 
+def _support_hits(labels, entry):
+    hits = 0
+    woman = labels.get('woman_posture') or labels.get('posture') or ''
+    if woman and _posture_fits(woman, entry.get('posture', '')):
+        hits += 1
+    man = labels.get('man_posture') or ''
+    if man and _posture_fits(man, entry.get('man_posture', '')):
+        hits += 1
+    return hits
+
+
+def _other_points(entry):
+    return sum(part['points'] for part in entry.get('breakdown', [])
+               if part['field'] not in ('女方支撑', '男方支撑'))
+
+
 def _rank_key(item):
     points, entry = item
     return (-points, entry['number'], entry['id'])
+
+
+def _choose_index(count):
+    """Index inside one same-score group. Zero keeps the lowest number."""
+    if count <= 1:
+        return 0
+    return random.randrange(count)
+
+
+def _promote_tie(items, key):
+    """Move one random member of the leading same-score group to the front."""
+    if len(items) < 2:
+        return
+    best = key(items[0])
+    count = 1
+    while count < len(items) and key(items[count]) == best:
+        count += 1
+    index = _choose_index(count)
+    if index:
+        chosen = items.pop(index)
+        items.insert(0, chosen)
 
 
 def _spread_rows(passed):
@@ -642,13 +801,18 @@ def _spread_rows(passed):
         if not group:
             continue
         group.sort(key=_rank_key)
-        if group[0][1]['id'] not in seen:
-            chosen.append(group[0])
-            seen.add(group[0][1]['id'])
+        best = group[0][0]
+        tied = [item for item in group if item[0] == best]
+        pick = tied[_choose_index(len(tied))]
+        if pick[1]['id'] not in seen:
+            chosen.append(pick)
+            seen.add(pick[1]['id'])
     unlabeled = [item for item in passed if item[1]['id'] not in seen]
     unlabeled.sort(key=_rank_key)
     if unlabeled:
-        chosen.append(unlabeled[0])
+        best = unlabeled[0][0]
+        tied = [item for item in unlabeled if item[0] == best]
+        chosen.append(tied[_choose_index(len(tied))])
     return chosen
 
 
@@ -661,8 +825,10 @@ def lookup(entries, query, request='', labels=None, choice=None):
         labels = dict(labels)
     if choice and choice.get('备选全部支撑'):
         labels['posture'] = ''
+        labels['woman_posture'] = ''
     elif choice and choice.get('支撑'):
         labels['posture'] = choice['支撑']
+        labels['woman_posture'] = choice['支撑']
     if named:
         hits = [entry for entry in entries if named in (entry['name'], entry['alias'])]
         if not hits:
@@ -689,15 +855,20 @@ def lookup(entries, query, request='', labels=None, choice=None):
         if _stated_match(labels, entry):
             passed.append((entry['score'], entry))
     if not passed:
-        return None, '查无此条：定稿姿势对不上已经写明的朝向、支撑或轴线。已停止，不自由扩写。', _rows(usable)
-    spread = bool(choice and choice.get('备选全部支撑'))
-    if spread:
-        passed = _spread_rows(passed)
-    else:
-        passed.sort(key=_rank_key)
+        return None, '查无此条：定稿姿势对不上已经写明的朝向或轴线。已停止，不自由扩写。', _rows(usable)
+    if labels.get('posture') or labels.get('man_posture'):
+        passed.sort(key=lambda item: (
+            -_support_hits(labels, item[1]),
+            -_other_points(item[1]),
+            item[1]['number'],
+            item[1]['id'],
+        ))
+        _promote_tie(passed, lambda item: (_support_hits(labels, item[1]), _other_points(item[1])))
         passed = passed[:3]
+    else:
+        passed = _spread_rows(passed)
     if not passed:
-        return None, '查无此条：定稿姿势对不上已经写明的朝向、支撑或轴线。已停止，不自由扩写。', _rows(usable)
+        return None, '查无此条：定稿姿势对不上已经写明的朝向或轴线。已停止，不自由扩写。', _rows(usable)
     entry = passed[0][1]
     ordered = [item[1] for item in passed]
     return entry, f'交合：{entry["id"]} {entry["alias"] or entry["name"]}，得分 {entry["score"]}', _rows(ordered)
@@ -715,7 +886,9 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
     query = parse_pose_input(contact_json)
     image = parse_image_state(image_json) if isinstance(image_json, str) and image_json.strip() else None
     if query.get('schema') == 'extract':
-        labels = {key: query[key] for key in ('woman_chest', 'man_chest', 'posture', 'axis', 'head')}
+        labels = {key: query[key] for key in (
+            'woman_chest', 'man_chest', 'posture', 'woman_posture', 'man_posture', 'axis', 'head',
+            'woman_parts', 'man_parts')}
         choice = choose_support(query['posture'], image)
         extraction = json.dumps(query['document'], ensure_ascii=False, indent=2)
     else:
