@@ -205,6 +205,47 @@ class SXDOpenAIClient:
                        max_retries=max_retries, timeout=timeout),)
 
 
+class SXDApiImageBatch:
+    """Skip empty reference slots, then pack the remaining images into one batch."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {
+            'max_side': ('INT', {'default': 1024, 'min': 256, 'max': 2048}),
+        }, 'optional': {name: ('IMAGE',) for name in ('image', 'image2', 'image3', 'image4')}}
+
+    RETURN_TYPES = ('IMAGE',)
+    RETURN_NAMES = ('images',)
+    FUNCTION = 'run'
+    CATEGORY = 'SXD/Gemma Image'
+    DESCRIPTION = '空的参考图地址直接跳过。其余图片缩到同一画布后按原顺序拼成一批。'
+
+    def run(self, max_side=1024, image=None, image2=None, image3=None, image4=None):
+        present = [item for item in (image, image2, image3, image4) if item is not None]
+        if not present:
+            raise ValueError('没有可发送的图片。空的参考图地址已被跳过，请至少填写一张。')
+        import numpy as np
+        import torch
+        from PIL import Image
+        pictures = []
+        for tensor in present:
+            if getattr(tensor, 'ndim', 0) != 4 or tensor.shape[0] < 1 or tensor.shape[-1] not in (3, 4):
+                raise ValueError('图片格式无效。')
+            for index in range(tensor.shape[0]):
+                array = tensor[index].detach().cpu().numpy()
+                picture = Image.fromarray(np.clip(array * 255, 0, 255).astype(np.uint8)).convert('RGB')
+                picture.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+                pictures.append(picture)
+        width = max(picture.width for picture in pictures)
+        height = max(picture.height for picture in pictures)
+        frames = []
+        for picture in pictures:
+            canvas = Image.new('RGB', (width, height), (255, 255, 255))
+            canvas.paste(picture, ((width - picture.width) // 2, (height - picture.height) // 2))
+            frames.append(torch.from_numpy(np.asarray(canvas, dtype=np.float32) / 255.0))
+        return (torch.stack(frames, dim=0),)
+
+
 class SXDGemmaImageTask:
     @classmethod
     def INPUT_TYPES(cls):

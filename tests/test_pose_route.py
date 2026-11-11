@@ -131,7 +131,7 @@ class LibraryTests(unittest.TestCase):
             self.assertEqual(missed['matches'], '[]')
             named = self.ask(tmp, dict(POSE, named_pose='还不能用'))
             self.assertFalse(named['ok'])
-            self.assertIn('还不是定稿', named['status'])
+            self.assertIn('没有定稿姿势', named['status'])
 
     def test_finalized_entries_rank_by_score_without_a_manual_order(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -212,8 +212,22 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(shown['女方支撑'], '站')
         self.assertEqual(shown['body_parts']['女方']['腰'], '腰前折')
         self.assertEqual(shown['body_parts']['女方']['臀'], '臀抬起')
-        self.assertEqual(shown['body_parts']['女方']['胸'], '背对对方')
+        self.assertEqual(shown['body_parts']['女方']['胸'], '')
+        self.assertEqual(shown['轴线'], '男方在女方身后')
         self.assertIn('pose_stand_both', result['status'])
+
+    def test_a_quoted_person_count_stays_a_number(self):
+        document = {
+            '人数': '2', 'alias': '', '接触': '阴茎进入阴道', '女方支撑': '仰躺', '男方支撑': '', '轴线': '',
+            'body_parts': {
+                '女方': {'头': '', '胸': '朝上', '腰': '', '胯': '', '臀': '', '大腿': '大腿分开', '膝盖': '', '脚': ''},
+                '男方': {'头': '', '胸': '', '腰': '', '胯': '', '臀': '', '大腿': '', '膝盖': '', '脚': ''},
+            },
+        }
+        parsed = route.parse_extraction(dump(document))
+        self.assertEqual(parsed['document']['人数'], 2)
+        self.assertEqual(parsed['document']['女方支撑'], '仰躺')
+        self.assertEqual(parsed['document']['body_parts']['女方']['大腿'], '大腿分开')
 
     def test_a_one_item_slot_list_is_read_as_the_phrase(self):
         document = {
@@ -226,6 +240,172 @@ class LibraryTests(unittest.TestCase):
         parsed = route.parse_extraction(dump(document))
         self.assertEqual(parsed['document']['body_parts']['女方']['大腿'], '大腿抬起')
         self.assertEqual(parsed['document']['支撑'], '站')
+
+    def blanks(self):
+        return {name: '' for name in route.SLOT_NAMES}
+
+    def extract(self, contact='阴茎进入阴道', chest=''):
+        woman = self.blanks()
+        woman['胸'] = chest
+        return {
+            '人数': 2, 'alias': '美人鱼', '接触': contact, '女方支撑': '', '男方支撑': '', '轴线': '',
+            'body_parts': {'女方': woman, '男方': self.blanks()},
+        }
+
+    def test_alias_does_not_lock_or_stop_the_lookup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [{
+                'id': 'pose_real', 'number': 1, 'name': '猫咪', 'alias': '跨坐',
+                'usable_for_selection': True, 'source_tags': ['阴道性交'],
+                'pose_sentence': '女人仰躺，胸朝上。阴茎进入阴道。',
+            }])
+            result = route.prepare(
+                dump(self.extract()), '男人将女人压在身下，面向女人插入她的阴道',
+                'RULES', 'POSE', tmp)
+        self.assertTrue(result['ok'], result['status'])
+        self.assertIn('pose_real', result['status'])
+        self.assertNotIn('查无此条：姿势名', result['status'])
+
+    def test_under_and_on_and_behind_stay_in_their_families(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [
+                {'id': 'pose_supine', 'number': 1, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人仰躺，胸朝上。男人跪着。阴茎进入阴道。'},
+                {'id': 'pose_stand', 'number': 2, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人站着，胸朝向男人。男人站着。阴茎进入阴道。'},
+                {'id': 'pose_hip', 'number': 3, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人臀蹲在男人髋上，胸朝向男人。男人仰躺。阴茎进入阴道。'},
+                {'id': 'pose_behind', 'number': 4, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人站着，胸朝下。男人在女人身后站着。阴茎进入阴道。'},
+                {'id': 'pose_reverse', 'number': 5, 'usable_for_selection': True,
+                 'source_tags': ['阴道性交'],
+                 'pose_sentence': '女人坐在男人身上，背对男人。男人在女人身后仰躺。阴茎进入阴道。'},
+            ])
+            folder = tmp
+
+            def chosen(request, chest=''):
+                result = route.prepare(dump(self.extract(chest=chest)), request, 'RULES', 'POSE', folder)
+                self.assertTrue(result['ok'], result['status'] + ' / ' + request)
+                shown = json.loads(result['extraction'])
+                rows = [row['id'] for row in json.loads(result['matches'])]
+                return result['status'].split()[0].replace('交合：', ''), rows, shown
+
+            under, rows, shown = chosen('男人将女人压在身下，分开女人双腿，面向女人插入她的阴道', chest='朝向对方')
+            self.assertEqual(under, 'pose_supine')
+            self.assertEqual(rows, ['pose_supine'])
+            self.assertEqual(shown['女方支撑'], '仰躺')
+            self.assertEqual(shown['body_parts']['女方']['胸'], '')
+
+            onto, rows, shown = chosen('男人扑在女人身上，插入她的阴道')
+            self.assertEqual(onto, 'pose_supine')
+            self.assertEqual(shown['女方支撑'], '仰躺')
+
+            riding, rows, shown = chosen('女人骑在男人髋上，插入她的阴道')
+            self.assertIn(riding, {'pose_hip', 'pose_reverse'})
+            self.assertTrue(set(rows) <= {'pose_hip', 'pose_reverse'})
+            self.assertEqual(shown['女方支撑'], '坐在对方身上')
+
+            behind, rows, shown = chosen('男人从后面插入女人的阴道')
+            self.assertEqual(behind, 'pose_behind')
+            self.assertNotIn('pose_reverse', rows)
+            self.assertEqual(shown['轴线'], '男方在女方身后')
+            self.assertEqual(shown['body_parts']['女方']['胸'], '')
+
+            both, rows, shown = chosen('女人坐在他身上，背对男人，从后面插入她的阴道')
+            self.assertEqual(both, 'pose_reverse')
+            self.assertEqual(rows, ['pose_reverse'])
+
+    def test_everyday_wording_and_contact_stay_in_closed_classes(self):
+        if not REAL_LIBRARY.is_dir():
+            self.skipTest('local pose library is absent')
+        entries = {entry['id']: entry for entry in route.load_library(REAL_LIBRARY)}
+
+        def run(request, contact=''):
+            slots = {name: '' for name in route.SLOT_NAMES}
+            document = {
+                '人数': 2, 'alias': '', '接触': contact, '女方支撑': '', '男方支撑': '', '轴线': '',
+                'body_parts': {'女方': dict(slots), '男方': dict(slots)},
+            }
+            result = route.prepare(dump(document), request, 'RULES', 'POSE', str(REAL_LIBRARY))
+            rows = json.loads(result['matches']) if result['matches'] else []
+            shown = json.loads(result['extraction'])
+            return result, shown, [entries[row['id']] for row in rows if row['id'] in entries]
+
+        def family(request, pred, contact=''):
+            result, shown, picked = run(request, contact)
+            self.assertTrue(result['ok'], request + ' ' + result['status'])
+            self.assertTrue(picked, request)
+            self.assertTrue(all(pred(entry) for entry in picked), request)
+
+        for request in (
+            '他扑上去，整个人压在她身上插入',
+            '他把女人推倒在床上插入',
+            '男人把女人放倒，然后插入',
+            '男人压住女人插她',
+            '男人整个盖在女人身上插入',
+            '她平躺，男人压上来插入',
+            '她躺着，他压上来插入',
+        ):
+            family(request, lambda entry: entry['posture'] == '仰躺' and not entry['woman_on'])
+        family('背后式插入', lambda entry: entry['axis'] and not entry['woman_on'])
+        family('侧着身子做，插入她', lambda entry: entry['posture'] == '侧卧')
+        family('她坐在他腿上摇，插入', lambda entry: entry['woman_on'])
+        family('男人抱着女人插入，她的脚还在地上', lambda entry: entry['posture'] == '站')
+        behind, _, picked = run('从后面压住她，插入')
+        self.assertTrue(behind['ok'])
+        self.assertTrue(all(entry['axis'] and not entry['woman_on'] for entry in picked))
+        self.assertFalse(all(entry['posture'] == '仰躺' for entry in picked))
+
+        oral, shown, picked = run('女人给他口交', '')
+        self.assertTrue(oral['ok'], oral['status'])
+        self.assertEqual(shown['接触'], '嘴接触阴茎')
+        self.assertTrue(all(entry['contact'] == '嘴接触阴茎' for entry in picked))
+        lick, shown, _ = run('男人舔她', '')
+        self.assertEqual(shown['接触'], '嘴接触阴部')
+        self.assertTrue(lick['ok'], lick['status'])
+        foot, shown, picked = run('足交', '')
+        self.assertEqual(shown['接触'], '足接触阴茎')
+        self.assertTrue(all(entry['contact'] == '足接触阴茎' for entry in picked))
+        entered, shown, picked = run('插入她的阴道', '')
+        self.assertEqual(shown['接触'], '阴茎进入阴道')
+        self.assertTrue(entered['ok'])
+        anal, shown, picked = run('肛交', '')
+        self.assertEqual(shown['接触'], '只进入肛门')
+        self.assertTrue(anal['ok'], anal['status'])
+        self.assertTrue(picked)
+        self.assertTrue(all(entry['contact'] == '阴茎进入阴道' for entry in picked))
+        self.assertIn('只进入肛门', anal['user'])
+        self.assertNotIn('阴茎进入阴道', anal['user'].split('摆法：', 1)[-1])
+        plain, shown, _ = run('把外套改成蓝色', '')
+        self.assertEqual(shown['接触'], '')
+        self.assertIn('不交合', plain['status'])
+        spoken = {
+            '干她': '阴茎进入阴道', '草她': '阴茎进入阴道', '被操': '阴茎进入阴道',
+            '插进去': '阴茎进入阴道', '插进小穴': '阴茎进入阴道', '性爱': '阴茎进入阴道',
+            '插入后穴': '只进入肛门', '爆菊': '只进入肛门', '从后面插入她': '阴茎进入阴道',
+            '后入': '', '传教士': '',
+            '口活': '嘴接触阴茎', '给他吹': '嘴接触阴茎', '深喉': '嘴接触阴茎',
+            '舔逼': '嘴接触阴部', '给她口': '嘴接触阴部',
+            '脚交': '足接触阴茎', '脚踩在地上插入': '阴茎进入阴道',
+            '手淫': '手指或玩具接触自己的阴蒂', '自摸': '手指或玩具接触自己的阴蒂',
+            '一边舔她一边插入': '',
+            '又插阴道又插肛门': '',
+            '用脚勾着他的腿插入': '阴茎进入阴道',
+            '脚夹着床沿插入': '阴茎进入阴道',
+            '进入她的房间': '',
+            '舔她的胸口': '',
+            '含住他的手指': '',
+            '菊花茶': '',
+            '1969年': '',
+            '挺进房间': '',
+            '被插队': '',
+        }
+        for request, contact in spoken.items():
+            self.assertEqual(route._request_contact(request), contact, request)
 
     def test_zip_keeps_pose_images_and_rejects_unmatched_ones(self):
         def packed(files):
@@ -410,6 +590,23 @@ class ApiWorkflowTests(unittest.TestCase):
                          self._by_title('大结构检查一次 · API')['id'])
         self.assertIsNone(self._by_title('提取原话 JSON · API')['inputs'][7]['link'])
         self.assertIsNotNone(self._by_title('读取图片支撑 · API')['inputs'][7]['link'])
+        self.assertEqual(self.links[self._by_title('读取图片支撑 · API')['inputs'][7]['link']][1],
+                         self._by_title('读图支撑 · 跳过空图')['id'])
+        self.assertEqual(self._by_title('读图支撑 · 跳过空图')['type'], 'SXDApiImageBatch')
+        unsafe = {'ImageResizeKJv2', 'ImageBatch', 'PreviewImage'}
+        exposed = []
+        for link in self.workflow['links']:
+            source = self.nodes[link[1]]
+            target = self.nodes[link[3]]
+            if (source.get('title') or '').startswith('Get_参考图_') and target['type'] in unsafe:
+                exposed.append((source['title'], target['type'], target.get('title')))
+        self.assertEqual(exposed, [])
+        for name in ('读图支撑 · 跳过空图', '扩写 · 跳过空图'):
+            linked = [item['name'] for item in self._by_title(name)['inputs'] if item.get('link')]
+            self.assertEqual(linked, ['image', 'image2', 'image3', 'image4'])
+        with self.assertRaises(ValueError) as empty:
+            nodes.SXDApiImageBatch().run()
+        self.assertIn('没有可发送的图片', str(empty.exception))
         for title, task, show in (
                 ('提取原话 · 校验结果', 'extract', '提取原话 · 完整返回'),
                 ('读图支撑 · 校验结果', 'image_support', '读图支撑 · 完整返回'),

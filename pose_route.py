@@ -242,6 +242,8 @@ def parse_extraction(text):
     if missing:
         raise ValueError('原话提取缺少字段：' + '、'.join(sorted(missing)))
     people = value['人数']
+    if isinstance(people, str) and people.strip().isdigit():
+        people = int(people.strip())
     if type(people) is not int or not 0 <= people <= 20:
         people = 0
     alias = value['alias'] if isinstance(value['alias'], str) else ''
@@ -377,6 +379,20 @@ def contact_from(tags, sentence):
     return ''
 
 
+def _contact_fits(requested, pose):
+    """性交的摆法也能肛交。库里的句子仍记阴道，肛交查询共用这些条目。"""
+    if requested == pose:
+        return True
+    return requested == '只进入肛门' and pose == '阴茎进入阴道'
+
+
+def _for_anal(sentence):
+    """只改交给扩写的那一份。库里的原文不动。"""
+    text = sentence or ''
+    text = text.replace('阴茎进入女人的阴道', '只进入肛门')
+    return text.replace('阴茎进入阴道', '只进入肛门')
+
+
 def _by_length(table):
     return tuple(sorted(table, key=lambda item: len(item[0]) if isinstance(item, tuple) else len(item), reverse=True))
 
@@ -427,6 +443,131 @@ def _axis(text):
     return '男方在女方身后' if _first(text, AXIS_PHRASES) else ''
 
 
+def _request_axis(text):
+    """后入、背后式只在原话里算身后。库里的句子不靠这些词。"""
+    if _axis(text) or re.search(r'后入|背后式|从背后', text or ''):
+        return '男方在女方身后'
+    return ''
+
+
+def _request_base(text):
+    """谁托着对方的骨盆。没说就空。同一件事的日常说法收进上下，不新开姿势。"""
+    text = text or ''
+    woman_on = bool(re.search(
+        r'坐在(男人|他)(的)?(身上|髋上|腿上)|骑在(男人|他)|骑乘|女上位'
+        r'|趴在(男人|他)(的)?身上|平躺在(男人|他)(的)?身上|躺在(男人|他)(的)?身上'
+        r'|在(男人|他)(的)?上方',
+        text,
+    ))
+    if woman_on and re.search(r'两腿之间|手上', text) and not re.search(r'身上|髋上|骑在|骑乘|女上位', text):
+        woman_on = False
+    man_on = bool(re.search(
+        r'压在[^。]{0,8}身下|扑在(女人|她)(的)?身上|趴在(女人|她)(的)?身上'
+        r'|伏在(女人|她)(的)?身上|盖在(女人|她)(的)?身上|压在(女人|她)(的)?身上'
+        r'|传教士|(女人|她|女方)(仰(躺|卧)|平躺)|平躺',
+        text,
+    ))
+    # 推倒、放倒、扑上去是她被放到下面。已经说了从后面，就不要再收成仰躺。
+    if not man_on and not _request_axis(text) and re.search(
+            r'推倒|放倒|扑上去|压上来|压住(女人|她)', text):
+        man_on = True
+    if woman_on:
+        return '女方在上'
+    if man_on:
+        return '男方在上'
+    return ''
+
+
+def _request_contact(text):
+    """原话里的做法收进已有的七类。说了两件不同的事就留空，不发明类别。从后面不是肛交。"""
+    text = text or ''
+    anal = bool(re.search(r'肛交|肛门|后庭|后穴|菊花(?!茶)|屁眼|爆菊|插入屁股|插进屁股', text))
+    named_vaginal = bool(re.search(r'阴道|插进小穴', text))
+    penetrate = bool(re.search(
+        r'进入她(?!的房|的屋)|进入他(?!的房|的屋|的嘴|嘴里)|做爱|性交|性爱|抽插'
+        r'|插她|插他|操她|操他|干她|草她|艹她|肏|被操|被干|被插(?!队)'
+        r'|插进去|顶进去|塞进去|挺进(?!房|屋)|插入(?!屁股|肛门)',
+        text,
+    ))
+    # 插入后穴是肛门。阴道和肛门都点了名，算两件事，不偷偷收成阴道。
+    vaginal = (named_vaginal and not anal) or (penetrate and not anal)
+    mutual = bool(re.search(r'(?<!\d)69(?!\d)|六九|互相口|互相舔', text))
+    penis_mouth = bool(re.search(
+        r'口交|口活|口爆|深喉|吹箫|口他|给他口|给男人口|帮他口|给他吹|帮他吹'
+        r'|含住他(?!的(?:手指|手|舌头|奶|胸))|含着他(?!的(?:手指|手|舌头|奶|胸))'
+        r'|含住阴茎|含着阴茎|含着鸡巴|舔鸡巴|吃鸡巴|舔阴茎|舔他的阴茎',
+        text,
+    ))
+    vulva_mouth = bool(re.search(
+        r'舔阴|舔她(?!的(?:胸|奶|脖|耳|嘴|脸|手))|舔女人(?!的(?:胸|奶|脖|耳|嘴|脸|手))'
+        r'|舔下面|舔逼|舔穴|口她|给她口|帮她口',
+        text,
+    )) and not penis_mouth
+    foot = bool(re.search(
+        r'足交|脚交|脚夹|用脚(夹|踩|蹭|碰|撸)|双脚夹|脚碰|脚踩(他|阴茎|鸡巴)',
+        text,
+    ))
+    # 脚夹着床、用脚勾着腿，同时又在插入，脚不是在做足交。
+    if penetrate and foot and not re.search(r'足交|脚交|阴茎|鸡巴', text):
+        foot = False
+    solo = bool(re.search(r'自己摸阴蒂|自慰|手淫|自摸', text))
+    found = []
+    if mutual or (penis_mouth and vulva_mouth):
+        found.append('互相口爱')
+    elif penis_mouth:
+        found.append('嘴接触阴茎')
+    elif vulva_mouth:
+        found.append('嘴接触阴部')
+    if foot:
+        found.append('足接触阴茎')
+    if solo:
+        found.append('手指或玩具接触自己的阴蒂')
+    if anal and not named_vaginal:
+        found.append('只进入肛门')
+    elif vaginal and not anal:
+        found.append('阴茎进入阴道')
+    found = list(dict.fromkeys(found))
+    if len(found) == 1:
+        return found[0]
+    return ''
+
+
+def _feet_stay_down(text):
+    """搂着、抱着，脚还在地上，是站。脚离开地面才是被抱起。"""
+    text = text or ''
+    if not re.search(r'脚(还)?在地上|脚着地|双脚着地', text):
+        return False
+    if re.search(r'离开地面|抱起来|抱起|抱离', text):
+        return False
+    return bool(re.search(r'抱|搂', text))
+
+
+def _explicit_chest_toward(text):
+    return any(phrase in (text or '') for phrase in (
+        '胸朝向男人', '胸朝向他', '胸朝向对方', '胸口对着',
+    ))
+
+
+def _woman_is_on_him(posture, woman_span):
+    """她的骨盆落在他身上。坐在两腿之间、坐在他手上不算。"""
+    if posture == '坐在对方身上':
+        return True
+    text = woman_span or ''
+    pelvis = bool(re.search(r'(臀|胯)(坐在|蹲在|在)男人髋上', text))
+    on_body = any(phrase in text for phrase in (
+        '坐在男人身上', '骑在男人', '在男人上方', '趴在男人身上',
+    ))
+    if not pelvis and not on_body:
+        return False
+    between = '两腿之间' in text or '手上' in text
+    seat = pelvis or any(phrase in text for phrase in (
+        '坐在男人身上', '骑在男人', '在男人上方', '趴在男人身上',
+    ))
+    if between and not seat:
+        return False
+    return True
+
+
 def _posture_fits(query, pose):
     if not query:
         return False
@@ -469,7 +610,10 @@ def _prompt_posture(text):
 
 def _request_postures(text):
     """Woman and man supports from the clauses that name them. An unnamed support stays the woman's."""
-    parts = re.split(r'(男人|男方|女人|女方)', text or '')
+    text = text or ''
+    for spoken, closed in (('侧着身子', '侧卧'), ('侧着躺', '侧卧'), ('侧身', '侧卧')):
+        text = text.replace(spoken, closed)
+    parts = re.split(r'(男人|男方|女人|女方)', text)
     woman = man = ''
     index = 1
     while index + 1 < len(parts):
@@ -522,21 +666,23 @@ def _entry_labels(sentence):
     woman, man = _person_spans(sentence)
     slots = _woman_slots(woman)
     man_slots = _woman_slots(man)
+    posture = _person_posture(woman)
     return {
         'woman_chest': slots['胸'],
         'man_chest': _first(man, CHEST_PHRASES),
-        'posture': _person_posture(woman),
+        'posture': posture,
         'man_posture': _person_posture(man),
         'axis': _axis(sentence),
         'head': slots['头'],
         'slots': slots,
         'man_slots': man_slots,
+        'woman_on': _woman_is_on_him(posture, woman),
     }
 
 
 def _request_labels(text):
     """Read only the closed labels the request already states. Empty labels do not score."""
-    axis = _axis(text)
+    axis = _request_axis(text)
     woman_chest = ''
     man_chest = ''
     if '她的背' in text or '女人的背' in text:
@@ -551,11 +697,11 @@ def _request_labels(text):
         woman_chest = '朝下'
     elif '胸朝上' in text:
         woman_chest = '朝上'
-    if axis and not woman_chest:
-        woman_chest = '背对对方'
     woman_posture, man_posture = _request_postures(text)
+    if _feet_stay_down(text) and not _request_base(text) and woman_posture in ('', '被抱起'):
+        woman_posture = '站'
     woman_parts, man_parts = _request_details(text)
-    return {
+    labels = {
         'woman_chest': woman_chest,
         'man_chest': man_chest,
         'posture': woman_posture,
@@ -564,7 +710,32 @@ def _request_labels(text):
         'head': _first(text, HEAD_CLASSES),
         'woman_parts': woman_parts,
         'man_parts': man_parts,
+        'base': '',
     }
+    _apply_base(labels, text)
+    return labels
+
+
+def _apply_base(labels, text):
+    """底座是附加闸门。已经写明的站、跪、侧卧、被抱起仍按承重，不改成仰躺。"""
+    base = _request_base(text)
+    posture = labels.get('woman_posture') or labels.get('posture') or ''
+    if base == '女方在上':
+        labels['base'] = '女方在上'
+        if posture in ('', '坐', '仰躺'):
+            labels['posture'] = '坐在对方身上'
+            labels['woman_posture'] = '坐在对方身上'
+    elif base == '男方在上' and posture not in ('站', '跪', '侧卧', '被抱起', '扒', '坐', '坐在对方身上'):
+        labels['base'] = '男方在上'
+        labels['posture'] = '仰躺'
+        labels['woman_posture'] = '仰躺'
+    elif posture == '坐在对方身上':
+        labels['base'] = '女方在上'
+    elif posture == '仰躺':
+        labels['base'] = '男方在上'
+    if labels.get('base') == '男方在上' and labels.get('woman_chest') == '朝向对方':
+        if not _explicit_chest_toward(text):
+            labels['woman_chest'] = ''
 
 
 def _spoken_details(chunk):
@@ -601,9 +772,14 @@ def _apply_stated_request(labels, document, text):
         labels['woman_posture'] = stated['posture']
     if stated.get('man_posture'):
         labels['man_posture'] = stated['man_posture']
-    for key in ('woman_chest', 'man_chest', 'axis'):
+    for key in ('woman_chest', 'man_chest', 'axis', 'base'):
         if stated.get(key):
             labels[key] = stated[key]
+    if stated.get('base') == '男方在上' and not _explicit_chest_toward(text):
+        if labels.get('woman_chest') == '朝向对方':
+            labels['woman_chest'] = ''
+    elif not labels.get('base'):
+        _apply_base(labels, text)
     for side in ('woman_parts', 'man_parts'):
         current = dict(labels.get(side) or {})
         for name, value in (stated.get(side) or {}).items():
@@ -624,8 +800,7 @@ def _apply_stated_request(labels, document, text):
     man = parts.get('男方') if isinstance(parts.get('男方'), dict) else {}
     parts['女方'] = woman
     parts['男方'] = man
-    if labels.get('woman_chest'):
-        woman['胸'] = labels['woman_chest']
+    woman['胸'] = labels.get('woman_chest') or ''
     if labels.get('man_chest'):
         man['胸'] = labels['man_chest']
     for name, value in (labels.get('woman_parts') or {}).items():
@@ -643,6 +818,19 @@ def _stated_match(labels, entry):
         return False
     if labels['axis'] and entry['axis'] != labels['axis']:
         return False
+    return _in_family(labels, entry)
+
+
+def _in_family(labels, entry):
+    """底座和从后面是闸门。支撑本身仍只记分，不淘汰。"""
+    base = labels.get('base') or ''
+    on_him = bool(entry.get('woman_on'))
+    if base == '女方在上':
+        return on_him
+    if base == '男方在上':
+        return entry.get('posture') == '仰躺' and not on_him
+    if labels.get('axis') and on_him:
+        return False
     return True
 
 
@@ -659,13 +847,13 @@ def _breakdown(query, labels, entry):
         parts.append({'field': field, 'query': query_value, 'pose': pose_value,
                       'points': weight if matched else 0})
 
-    add('接触', contact, entry['contact'], WEIGHT_CONTACT)
+    add('接触', contact, entry['contact'], WEIGHT_CONTACT, _contact_fits(contact, entry['contact']))
     add('女方胸', labels['woman_chest'], entry['woman_chest'], WEIGHT_WOMAN_CHEST)
     add('男方胸', labels['man_chest'], entry['man_chest'], WEIGHT_MAN_CHEST)
     woman_posture = labels.get('woman_posture') or labels.get('posture') or ''
     if woman_posture:
         add('女方支撑', woman_posture, entry['posture'], WEIGHT_POSTURE,
-            _posture_fits(woman_posture, entry['posture']))
+            _woman_support_match(labels, entry))
     if labels.get('man_posture'):
         add('男方支撑', labels['man_posture'], entry.get('man_posture', ''), WEIGHT_POSTURE,
             _posture_fits(labels['man_posture'], entry.get('man_posture', '')))
@@ -772,8 +960,13 @@ def _camera_line(entry):
     return camera
 
 
-def _pose_user(original, entry):
+def _pose_user(original, entry, requested=''):
     camera = _camera_line(entry)
+    sentence = entry['pose_sentence']
+    contact_rule = '不得改支撑、胸的朝向、站位和接触。'
+    if requested == '只进入肛门' and entry.get('contact') == '阴茎进入阴道':
+        sentence = _for_anal(sentence)
+        contact_rule = '不得改支撑、胸的朝向和站位。接触按原话只进入肛门，不要写成进入阴道。'
     if _has_image(entry):
         instruction = (
             '已取定姿势。prompt 正文按这个格式写，前三行逐字照抄：\n'
@@ -782,15 +975,15 @@ def _pose_user(original, entry):
             '目标是保持图1的背景，让图1女人完成图2的姿势。\n'
             '生图详细描述：\n'
             '镜头：\n'
-            '生图详细描述用连贯的话写入下面的摆法，不得改支撑、胸的朝向、站位和接触。'
+            '生图详细描述用连贯的话写入下面的摆法，' + contact_rule +
             '衣着、身材、场景只取原话和图1里已经有的。\n'
-            '摆法：\n' + entry['pose_sentence'] + '\n'
+            '摆法：\n' + sentence + '\n'
             '镜头素材：\n' + camera
         )
     else:
         instruction = (
-            '已取定姿势。下面的摆法必须原样写入提示词，不得改支撑、站位、接触和镜头：\n'
-            + entry['pose_sentence'] + '\n镜头：\n' + camera
+            '已取定姿势。下面的摆法必须原样写入提示词，' + contact_rule + '\n'
+            + sentence + '\n镜头：\n' + camera
         )
     return original.rstrip() + '\n\n' + instruction
 
@@ -801,10 +994,18 @@ def _pose_image(entry):
     return ''
 
 
+def _woman_support_match(labels, entry):
+    woman = labels.get('woman_posture') or labels.get('posture') or ''
+    if not woman:
+        return False
+    if woman == '坐在对方身上' and entry.get('woman_on'):
+        return True
+    return _posture_fits(woman, entry.get('posture', ''))
+
+
 def _support_hits(labels, entry):
     hits = 0
-    woman = labels.get('woman_posture') or labels.get('posture') or ''
-    if woman and _posture_fits(woman, entry.get('posture', '')):
+    if _woman_support_match(labels, entry):
         hits += 1
     man = labels.get('man_posture') or ''
     if man and _posture_fits(man, entry.get('man_posture', '')):
@@ -872,35 +1073,23 @@ def _spread_rows(passed):
 
 def lookup(entries, query, request='', labels=None, choice=None):
     """Score finalized entries. Image conflicts are not read at runtime."""
-    named = query['named_pose']
     if labels is None:
         labels = _request_labels(request)
     else:
         labels = dict(labels)
-    if choice and choice.get('备选全部支撑'):
-        labels['posture'] = ''
-        labels['woman_posture'] = ''
-    elif choice and choice.get('支撑'):
-        labels['posture'] = choice['支撑']
-        labels['woman_posture'] = choice['支撑']
-    if named:
-        hits = [entry for entry in entries if named in (entry['name'], entry['alias'])]
-        if not hits:
-            return None, f'查无此条：姿势名「{named}」不在库里。已停止，不自由扩写。', []
-        if len(hits) > 1:
-            return None, '同名姿势超过一条，已停止，不自由扩写。', _rows(hits)
-        entry = hits[0]
-        if not entry['usable']:
-            return None, f'查无此条：{entry["id"]} 还不是定稿。已停止，不自由扩写。', []
-        if query['contacts'] and entry['contact'] not in query['contacts']:
-            return None, f'查无此条：{entry["id"]} 完成不了要求的接触。已停止，不自由扩写。', _rows(hits)
-        entry['score'] = _score(query, labels, entry)
-        return entry, f'交合：{entry["id"]} {entry["alias"] or entry["name"]}，得分 {entry["score"]}', _rows(hits)
+    if not labels.get('base'):
+        if choice and choice.get('备选全部支撑'):
+            labels['posture'] = ''
+            labels['woman_posture'] = ''
+        elif choice and choice.get('支撑'):
+            labels['posture'] = choice['支撑']
+            labels['woman_posture'] = choice['支撑']
     if not query['contacts']:
         return None, '查无此条：没有点名，也没有可匹配的接触。已停止，不自由扩写。', []
     if len(query['contacts']) != 1:
         return None, '查无此条：一次只能匹配一种接触。已停止，不自由扩写。', []
-    usable = [entry for entry in entries if entry['usable'] and entry['contact'] == query['contacts'][0]]
+    requested = query['contacts'][0]
+    usable = [entry for entry in entries if entry['usable'] and _contact_fits(requested, entry['contact'])]
     if not usable:
         return None, '查无此条：没有定稿姿势能完成这个接触。已停止，不自由扩写。', []
     passed = []
@@ -932,12 +1121,27 @@ def _blank_support():
     return {'支撑': '', '来源': '', '直接适配': False, '备选全部支撑': True, '说明': '还没有读图结果。'}
 
 
+def _apply_stated_contact(query, text):
+    """原话已经写明的做法覆盖模型漏写的接触。没写到就保持模型的值。"""
+    if query.get('schema') != 'extract':
+        return
+    stated = _request_contact(text)
+    if not stated:
+        return
+    query['contacts'] = [stated]
+    query['route'] = 'pose'
+    document = query.get('document')
+    if isinstance(document, dict):
+        document['接触'] = stated
+
+
 def prepare(contact_json, original_request, general_rules, pose_rules, library_dir, image_json=''):
     if not isinstance(original_request, str) or not original_request.strip():
         raise ValueError('原始编辑要求不能为空。')
     if not isinstance(general_rules, str) or not general_rules.strip():
         raise ValueError('通用扩写规则不能为空。')
     query = parse_pose_input(contact_json)
+    _apply_stated_contact(query, original_request)
     image = parse_image_state(image_json) if isinstance(image_json, str) and image_json.strip() else None
     if query.get('schema') == 'extract':
         labels = {key: query[key] for key in (
@@ -970,7 +1174,8 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
         return {'ok': False, 'system': '', 'user': '', 'status': status,
                 'extraction': extraction, 'matches': shown, 'support': support,
                 'image_state': image_state, 'pose_image': ''}
-    return {'ok': True, 'system': pose_rules, 'user': _pose_user(original_request, entry),
+    requested = query['contacts'][0] if len(query.get('contacts') or []) == 1 else ''
+    return {'ok': True, 'system': pose_rules, 'user': _pose_user(original_request, entry, requested),
             'status': status, 'extraction': extraction, 'matches': shown, 'support': support,
             'image_state': image_state, 'pose_image': _pose_image(entry)}
 
