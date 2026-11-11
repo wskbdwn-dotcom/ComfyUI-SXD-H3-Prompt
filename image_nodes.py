@@ -152,6 +152,59 @@ def messages(system, user, images, config):
     return [{'role': 'system', 'content': system}, {'role': 'user', 'content': content}], count
 
 
+class SXDImageTaskResult:
+    """Check a remote API's complete answer with the same rules as the local Gemma task."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {
+            'text': ('STRING', {'forceInput': True}),
+            'task': (['prompt', 'extract', 'image_support', 'anatomy'], {'default': 'prompt'}),
+        }}
+
+    RETURN_TYPES = ('STRING', 'STRING')
+    RETURN_NAMES = ('text', 'raw_output')
+    FUNCTION = 'run'
+    CATEGORY = 'SXD/Gemma Image'
+    DESCRIPTION = '校验远程 API 的完整正文。通过后输出规范化 JSON，原文留在 raw_output。'
+
+    def run(self, text, task='prompt'):
+        if not isinstance(text, str):
+            raise ValueError('API 完整结果必须是字符串。')
+        try:
+            normalized = validate_answer(text, task)
+        except ValueError as error:
+            raise ValueError('API 完整结果未通过校验：' + str(error) + '\n' + text) from error
+        return normalized, text
+
+
+class SXDOpenAIClient:
+    """OpenAI-compatible client. The key comes from this call, not the process environment."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {'required': {
+            'base_url': ('STRING', {'default': 'http://127.0.0.1:8000/v1'}),
+            'api_key': ('STRING', {'default': ''}),
+            'max_retries': ('INT', {'default': 2, 'min': 0, 'max': 10}),
+            'timeout': ('INT', {'default': 600, 'min': 1, 'max': 7200}),
+        }}
+
+    RETURN_TYPES = ('OAIAPI_CLIENT',)
+    RETURN_NAMES = ('client',)
+    FUNCTION = 'run'
+    CATEGORY = 'SXD/Gemma Image'
+    DESCRIPTION = '远程 OpenAI 兼容接口。密钥由本次调用传入，留空则只发占位符。'
+
+    def run(self, base_url, api_key, max_retries, timeout):
+        from openai import OpenAI
+        if not isinstance(base_url, str) or not base_url.strip():
+            raise ValueError('远程 API 地址不能为空。')
+        key = api_key.strip() if isinstance(api_key, str) else ''
+        return (OpenAI(api_key=key or '-', base_url=base_url.strip(),
+                       max_retries=max_retries, timeout=timeout),)
+
+
 class SXDGemmaImageTask:
     @classmethod
     def INPUT_TYPES(cls):

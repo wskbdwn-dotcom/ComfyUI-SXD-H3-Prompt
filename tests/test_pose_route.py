@@ -370,3 +370,75 @@ class PoseWorkflowTests(unittest.TestCase):
             if group_of(self.nodes[link[1]]) != group_of(self.nodes[link[3]]):
                 crossed.append(link[0])
         return crossed
+
+
+class ApiWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        folder = ROOT / 'workflows/qwen'
+        self.workflow = json.loads((folder / 'image2image_qwen2.1-qwen38-api-pose-route.json').read_text())
+        self.nodes = {node['id']: node for node in self.workflow['nodes']}
+        self.links = {link[0]: link for link in self.workflow['links']}
+
+    def test_remote_api_replaces_gemma_and_keeps_the_full_text(self):
+        self.assertEqual(self._by_title('API 模型名')['widgets_values'], ['qwen3.8'])
+        self.assertEqual(self._by_title('温度')['widgets_values'], [1.0])
+        self.assertEqual(self._by_title('最大生成长度')['widgets_values'], [8192])
+        self.assertEqual(self._by_title('Top P')['widgets_values'], [0.95])
+        self.assertIn('"enable_thinking": false', self._by_title('思考强度 · 改这个 JSON')['widgets_values'][0])
+        client = self._by_title('远程 API 地址和密钥 · 调用时传入')
+        self.assertEqual(client['type'], 'SXDOpenAIClient')
+        self.assertEqual(client['widgets_values'][0], 'http://127.0.0.1:8000/v1')
+        self.assertEqual(client['widgets_values'][1], '')
+        calls = [node for node in self.workflow['nodes'] if node['type'] == 'OAIAPI_ChatCompletion']
+        self.assertEqual(len(calls), 4)
+        self.assertFalse(any(node['type'] in ('SXDGemmaImageTask', 'H3PromptLiveDisplay')
+                             for node in self.workflow['nodes']))
+        self.assertTrue(PoseWorkflowTests._via_set(self, 'API 模型名', 0, 'API模型', '提取原话 JSON · API', 1))
+        chain = []
+        node = self._by_title('Set_API选项')
+        while node['type'] != 'OAIAPI_ExtraBody':
+            link_id = next(item['link'] for item in node['inputs'] if item['type'] == 'OAIAPI_OPTIONS')
+            node = self.nodes[self.links[link_id][1]]
+            chain.append(node['type'])
+        self.assertEqual(chain, ['OAIAPI_Seed', 'OAIAPI_MaxTokens', 'OAIAPI_TopP',
+                                 'OAIAPI_Temperature', 'OAIAPI_ExtraBody'])
+        self.assertEqual(self.links[self._by_title('提取原话 · 完整返回')['inputs'][0]['link']][1],
+                         self._by_title('提取原话 JSON · API')['id'])
+        self.assertEqual(self.links[self._by_title('扩写完整返回 · 只有 prompt 字段')['inputs'][0]['link']][1],
+                         self._by_title('自定义规则 · API 直接扩写')['id'])
+        self.assertEqual(self.links[self._by_title('检查完整返回')['inputs'][0]['link']][1],
+                         self._by_title('大结构检查一次 · API')['id'])
+        self.assertIsNone(self._by_title('提取原话 JSON · API')['inputs'][7]['link'])
+        self.assertIsNotNone(self._by_title('读取图片支撑 · API')['inputs'][7]['link'])
+        for title, task, show in (
+                ('提取原话 · 校验结果', 'extract', '提取原话 · 完整返回'),
+                ('读图支撑 · 校验结果', 'image_support', '读图支撑 · 完整返回'),
+                ('扩写 · 校验结果', 'prompt', '扩写完整返回 · 只有 prompt 字段'),
+                ('检查 · 校验结果', 'anatomy', '检查完整返回')):
+            node = self._by_title(title)
+            self.assertEqual(node['type'], 'SXDImageTaskResult')
+            self.assertEqual(node['widgets_values'], [task])
+            self.assertEqual(self.links[node['inputs'][0]['link']][1], self._by_title(show)['id'])
+        self.assertEqual(self.links[self._by_title('姿势查库 · 取一条或停止')['inputs'][0]['link']][1],
+                         self._by_title('提取原话 · 校验结果')['id'])
+        self.assertEqual(self.links[self._by_title('读图开关 · 开则识别支撑')['inputs'][1]['link']][1],
+                         self._by_title('读图支撑 · 校验结果')['id'])
+        self.assertEqual(nodes.SXDImageTaskResult().run('```json\n{"prompt":" 保持衣服 "}\n```', 'prompt'),
+                         ('{"prompt":"保持衣服"}', '```json\n{"prompt":" 保持衣服 "}\n```'))
+        with self.assertRaises(ValueError) as raised:
+            nodes.SXDImageTaskResult().run('不是 JSON', 'extract')
+        self.assertIn('不是 JSON', str(raised.exception))
+        self.assertEqual(PoseWorkflowTests._cross_group_links(self), [])
+
+    def test_key_comes_from_the_call(self):
+        import sys
+        from unittest import mock
+        openai = mock.Mock()
+        with mock.patch.dict(sys.modules, {'openai': openai}):
+            nodes.SXDOpenAIClient().run('http://example/v1', 'call-key', 1, 30)
+            self.assertEqual(openai.OpenAI.call_args.kwargs['api_key'], 'call-key')
+            nodes.SXDOpenAIClient().run('http://example/v1', '  ', 0, 10)
+            self.assertEqual(openai.OpenAI.call_args.kwargs['api_key'], '-')
+
+    def _by_title(self, title):
+        return PoseWorkflowTests._by_title(self, title)
