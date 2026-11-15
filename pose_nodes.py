@@ -38,9 +38,11 @@ class SXDPoseRoute:
             'image2': ('IMAGE',),
         }}
 
-    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'IMAGE')
+    RETURN_TYPES = ('STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'STRING', 'IMAGE',
+                    'BOOLEAN', 'STRING')
     RETURN_NAMES = ('system_prompt', 'user_prompt', 'status', 'extraction', 'matches',
-                    'support_choice', 'image_state', 'pose_image')
+                    'support_choice', 'image_state', 'pose_image',
+                    'use_tested_prompt', 'image_prompt')
     FUNCTION = 'run'
     CATEGORY = 'SXD/Gemma Image'
     DESCRIPTION = '按接触记录从已上传的姿势库取一条。取到姿势图时从 pose_image 输出，接到生图的参考图2。没有可选取条目就拦住后面的扩写。'
@@ -58,8 +60,10 @@ class SXDPoseRoute:
             system = user = _blocker(result['status'])
         chosen = result.get('pose_image') or ''
         pose_image = load_pose_image(chosen) if chosen else image2
+        image_prompt = result.get('image_prompt') or ''
         return (system, user, result['status'], result['extraction'], result['matches'],
-                result['support'], result['image_state'], pose_image)
+                result['support'], result['image_state'], pose_image,
+                bool(image_prompt), image_prompt)
 
 
 def register_pose_routes():

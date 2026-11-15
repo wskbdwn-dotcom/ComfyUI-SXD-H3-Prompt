@@ -25,13 +25,20 @@ POSE_RULES = """你是图像编辑指令写作者。只输出简体中文，一�
 
 图1是女人的形象。
 图2是姿势参考图。
-目标是保持图1的背景，让图1女人完成图2的姿势。
+目标是保持图1的背景和女人的形象，按图2画出姿势里的每个人。图2里有第二个人时，把他单独画出来，不要并进女人身体。
 生图详细描述：
 镜头：
 
-生图详细描述写成连贯的话，不要分点。先写图1和原话里已经有的衣着、身材、场景，再写入已取定的摆法。图2只提供身体摆法，不要把图2里的脸、发型、衣服或房间写进来，也不要换掉图1的背景。
+生图详细描述写成连贯的话，不要分点。先写图1和原话里已经有的衣着、身材、场景，再写入已取定的摆法。图2只提供身体摆法，不要把图2里的脸、发型、衣服或房间写进来，也不要换掉图1的背景。摆法里有男人时，写清他的头、胸、手臂和腿在哪里。他贴在女人背上、趴在女人身上或压在女人身上，也要写成画面里的另一个人，不能只留下女人。
 镜头这一行：原话写了景别或取景范围就用原话；没写就用已取定的镜头。没有镜头素材时不要自己编景别。
 """
+TESTED_PROMPT = """图中人物数量：2。
+图1：是女人的形象，去掉衣服，让她全身赤裸。
+图2：是姿势参考图。
+男人：新创建，高鼻梁蓝眼睛外国人，全身赤裸，阴茎勃起。
+目标：是保持图1的背景和女人的形象，按图2姿势画图。
+生图详细描述：{sentence}
+风格构图：整体场景以写实风格呈现，与图1的风格保持一致。"""
 STORE = Path(__file__).resolve().parent / 'pose_data' / 'entries'
 IMAGE_DIR = 'images'
 MAX_ZIP_BYTES = 128 * 1024 * 1024
@@ -889,12 +896,15 @@ def load_library(directory):
         data = json.loads(file.read_text(encoding='utf-8'))
         if not isinstance(data, dict) or not data.get('id'):
             raise PoseStop('姿势条目缺少 id：' + file.name)
-        sentence = data.get('pose_sentence') if isinstance(data.get('pose_sentence'), str) else ''
+        prompt = data.get('pose_sentence') if isinstance(data.get('pose_sentence'), str) else ''
+        match = data.get('match_sentence') if isinstance(data.get('match_sentence'), str) else ''
+        if not match.strip():
+            match = prompt
         camera = data.get('camera') if isinstance(data.get('camera'), str) else ''
         tags = data.get('source_tags') if isinstance(data.get('source_tags'), list) else []
         source_tags = [item.strip() for item in tags if isinstance(item, str) and item.strip()]
         source_image = data.get('source_image') if isinstance(data.get('source_image'), str) else ''
-        contact = contact_from(source_tags, sentence)
+        contact = contact_from(source_tags, match)
         number = data.get('number')
         if type(number) is not int:
             number = 10**9
@@ -903,15 +913,16 @@ def load_library(directory):
             'number': number,
             'name': data.get('name') if isinstance(data.get('name'), str) else '',
             'alias': data.get('alias') if isinstance(data.get('alias'), str) else '',
-            'usable': data.get('usable_for_selection') is True and bool(sentence.strip()),
+            'usable': data.get('usable_for_selection') is True and bool(prompt.strip()),
             'source_tags': source_tags,
             'source_image': source_image.strip(),
             'contact': contact,
             'contacts': [contact] if contact else [],
-            'pose_sentence': sentence.strip(),
+            'pose_sentence': prompt.strip(),
+            'match_sentence': match.strip(),
             'camera': camera.strip(),
             'breakdown': [],
-            **_entry_labels(sentence),
+            **_entry_labels(match),
         })
     if not entries:
         raise PoseStop('姿势库目录里没有条目：' + str(path))
@@ -949,7 +960,8 @@ def _rows(entries):
         'woman_chest': entry['woman_chest'], 'man_chest': entry['man_chest'],
         'posture': entry['posture'], 'axis': entry['axis'], 'head': entry['head'],
         'slots': entry['slots'],
-        'pose_sentence': entry['pose_sentence'], 'camera': entry['camera'],
+        'pose_sentence': entry['pose_sentence'], 'match_sentence': entry.get('match_sentence', ''),
+        'camera': entry['camera'],
     } for entry in entries]
 
 
@@ -958,6 +970,12 @@ def _camera_line(entry):
     if not camera:
         return '（这条没有镜头。不要自行补镜头。）'
     return camera
+
+
+def tested_prompt(sentence):
+    """The image prompt used after a pose is locked. The sentence is not rewritten."""
+    text = " ".join((sentence or "").split())
+    return TESTED_PROMPT.format(sentence=text)
 
 
 def _pose_user(original, entry, requested=''):
@@ -972,11 +990,13 @@ def _pose_user(original, entry, requested=''):
             '已取定姿势。prompt 正文按这个格式写，前三行逐字照抄：\n'
             '图1是女人的形象。\n'
             '图2是姿势参考图。\n'
-            '目标是保持图1的背景，让图1女人完成图2的姿势。\n'
+            '目标是保持图1的背景和女人的形象，按图2画出姿势里的每个人。图2里有第二个人时，把他单独画出来，不要并进女人身体。\n'
             '生图详细描述：\n'
             '镜头：\n'
             '生图详细描述用连贯的话写入下面的摆法，' + contact_rule +
-            '衣着、身材、场景只取原话和图1里已经有的。\n'
+            '衣着、身材、场景只取原话和图1里已经有的。'
+            '摆法里有男人时，把他写成看得见的另一个人，写清头、胸、手臂和腿在哪里。'
+            '他贴在女人背上或压在女人身上，也不能并进女人身体。\n'
             '摆法：\n' + sentence + '\n'
             '镜头素材：\n' + camera
         )
@@ -1159,7 +1179,8 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
     if query['route'] == 'general':
         return {'ok': True, 'system': general_rules, 'user': original_request,
                 'status': '不交合：沿用通用扩写规则', 'extraction': extraction, 'matches': '[]',
-                'support': support, 'image_state': image_state, 'pose_image': ''}
+                'support': support, 'image_state': image_state, 'pose_image': '',
+                'image_prompt': ''}
     if not isinstance(pose_rules, str) or not pose_rules.strip():
         raise ValueError('交合扩写规则不能为空。')
     try:
@@ -1167,17 +1188,21 @@ def prepare(contact_json, original_request, general_rules, pose_rules, library_d
     except PoseStop as error:
         return {'ok': False, 'system': '', 'user': '', 'status': str(error),
                 'extraction': extraction, 'matches': '[]', 'support': support,
-                'image_state': image_state, 'pose_image': ''}
+                'image_state': image_state, 'pose_image': '', 'image_prompt': ''}
     entry, status, rows = lookup(entries, query, original_request, labels, choice)
     shown = json.dumps(rows, ensure_ascii=False, indent=2)
     if entry is None:
         return {'ok': False, 'system': '', 'user': '', 'status': status,
                 'extraction': extraction, 'matches': shown, 'support': support,
-                'image_state': image_state, 'pose_image': ''}
+                'image_state': image_state, 'pose_image': '', 'image_prompt': ''}
     requested = query['contacts'][0] if len(query.get('contacts') or []) == 1 else ''
+    sentence = entry['pose_sentence']
+    if requested == '只进入肛门' and entry.get('contact') == '阴茎进入阴道':
+        sentence = _for_anal(sentence)
     return {'ok': True, 'system': pose_rules, 'user': _pose_user(original_request, entry, requested),
             'status': status, 'extraction': extraction, 'matches': shown, 'support': support,
-            'image_state': image_state, 'pose_image': _pose_image(entry)}
+            'image_state': image_state, 'pose_image': _pose_image(entry),
+            'image_prompt': tested_prompt(sentence)}
 
 
 def parse_pose_input(text):

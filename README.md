@@ -167,6 +167,12 @@ node tests/test_live.mjs
 
 发布前仍需在目标 GPU 上验证连续两轮扩写，以及与 H3、其他插件共存。离线测试不等于 GPU 验收。
 
+## MiniMax H3 Image 生图版本
+
+姿势查库、扩写、检查和按需修复仍走原来的完整流程。出图模型换成 MiniMax H3 Image 的版本在 [image2image_minimax-h3-qwen38-api-pose-route.json](workflows/h3/image2image_minimax-h3-qwen38-api-pose-route.json)。Qwen 2.1 的工作流没有替换。
+
+这一版的采样和试跑一致：736×1280，euler，simple，6 步，CFG 1。图1接女人参考，图2接查到的姿势图。查到姿势后，生图提示词直接用试跑那套写法，把条目的 `pose_sentence` 填进「生图详细描述」，不再交给扩写模型改写。没查到交合姿势时，仍走原来的扩写。Qwen 专用的 LoRA 和 SageAttention 留在画布上但不参与执行。模型文件是 `minimax_h3_image_pruned_int8_convrot.safetensors`、`qwen3vl_32b_minimax_h3_int8_convrot.safetensors`、`minimax_h3_image_vae_fp16.safetensors`。
+
 ## Qwen 图生图的原生 Gemma 扩写与检查
 
 新增 **SXD Gemma · 图像扩写 / 大结构检查** 节点，直接使用本插件的 Gemma 后端，支持规则输入、1–4 张图片扩写、单张成图检查、思考保护和模型驻留开关。无需 KLL 插件或外部推理服务。相同模型配置下与 H3 节点共用一份模型缓存；原有 H3 接口、规则和默认行为保持不变。

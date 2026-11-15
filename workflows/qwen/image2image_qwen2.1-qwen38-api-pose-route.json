@@ -1,8 +1,8 @@
 {
   "id": "7c1a0e44-6a2d-4b8e-9f31-2d6b8a4c91e0",
   "revision": 0,
-  "last_node_id": 1488,
-  "last_link_id": 211,
+  "last_node_id": 1492,
+  "last_link_id": 220,
   "nodes": [
     {
       "id": 10,
@@ -2389,7 +2389,8 @@
           "name": "response",
           "type": "STRING",
           "links": [
-            43
+            43,
+            216
           ]
         },
         {
@@ -2888,16 +2889,14 @@
         {
           "name": "anything",
           "type": "*",
-          "link": 43
+          "link": 211
         }
       ],
       "outputs": [
         {
           "name": "output",
           "type": "*",
-          "links": [
-            211
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -2964,7 +2963,7 @@
         {
           "name": "anything",
           "type": "*",
-          "link": 48
+          "link": 220
         }
       ],
       "outputs": [
@@ -5132,7 +5131,7 @@
         "Node name for S&R": "StringConstantMultiline"
       },
       "widgets_values": [
-        "你是图像编辑指令写作者。只输出简体中文，一个 JSON 对象，且只有一个非空字符串字段 prompt。不要 Markdown，不要解释。\n\n用户消息里有一条已经取定的姿势。不要另选姿势，不要改这条里的承重、胸的朝向、站位和接触。\n有姿势图时，prompt 的正文必须是下面这五段，顺序不变，段与段之间换行。前三行逐字照抄：\n\n图1是女人的形象。\n图2是姿势参考图。\n目标是保持图1的背景，让图1女人完成图2的姿势。\n生图详细描述：\n镜头：\n\n生图详细描述写成连贯的话，不要分点。先写图1和原话里已经有的衣着、身材、场景，再写入已取定的摆法。图2只提供身体摆法，不要把图2里的脸、发型、衣服或房间写进来，也不要换掉图1的背景。\n镜头这一行：原话写了景别或取景范围就用原话；没写就用已取定的镜头。没有镜头素材时不要自己编景别。\n",
+        "你是图像编辑指令写作者。只输出简体中文，一个 JSON 对象，且只有一个非空字符串字段 prompt。不要 Markdown，不要解释。\n\n用户消息里有一条已经取定的姿势。不要另选姿势，不要改这条里的承重、胸的朝向、站位和接触。\n有姿势图时，prompt 的正文必须是下面这五段，顺序不变，段与段之间换行。前三行逐字照抄：\n\n图1是女人的形象。\n图2是姿势参考图。\n目标是保持图1的背景和女人的形象，按图2画出姿势里的每个人。图2里有第二个人时，把他单独画出来，不要并进女人身体。\n生图详细描述：\n镜头：\n\n生图详细描述写成连贯的话，不要分点。先写图1和原话里已经有的衣着、身材、场景，再写入已取定的摆法。图2只提供身体摆法，不要把图2里的脸、发型、衣服或房间写进来，也不要换掉图1的背景。摆法里有男人时，写清他的头、胸、手臂和腿在哪里。他贴在女人背上、趴在女人身上或压在女人身上，也要写成画面里的另一个人，不能只留下女人。\n镜头这一行：原话写了景别或取景范围就用原话；没写就用已取定的镜头。没有镜头素材时不要自己编景别。\n",
         false
       ]
     },
@@ -5570,7 +5569,8 @@
           "name": "response",
           "type": "STRING",
           "links": [
-            163
+            163,
+            213
           ]
         },
         {
@@ -6297,7 +6297,8 @@
           "name": "STRING",
           "type": "STRING",
           "links": [
-            164
+            164,
+            214
           ]
         }
       ],
@@ -6329,7 +6330,8 @@
           "name": "BOOLEAN",
           "type": "BOOLEAN",
           "links": [
-            162
+            162,
+            212
           ]
         }
       ],
@@ -6414,7 +6416,9 @@
           "name": "BOOLEAN",
           "type": "BOOLEAN",
           "links": [
-            167
+            167,
+            215,
+            218
           ]
         }
       ],
@@ -7366,16 +7370,14 @@
         {
           "name": "anything",
           "type": "*",
-          "link": 163
+          "link": 209
         }
       ],
       "outputs": [
         {
           "name": "output",
           "type": "*",
-          "links": [
-            209
-          ]
+          "links": []
         }
       ],
       "properties": {
@@ -7456,7 +7458,7 @@
         {
           "name": "text",
           "type": "STRING",
-          "link": 209
+          "link": 163
         },
         {
           "name": "task",
@@ -7558,7 +7560,7 @@
         {
           "name": "text",
           "type": "STRING",
-          "link": 211
+          "link": 43
         },
         {
           "name": "task",
@@ -7712,6 +7714,192 @@
       "widgets_values": [
         1024
       ]
+    },
+    {
+      "type": "StringConstant",
+      "title": "已关闭畸形检查",
+      "pos": [
+        2320,
+        4000
+      ],
+      "size": [
+        280,
+        60
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": [
+            217,
+            219
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "StringConstant"
+      },
+      "widgets_values": [
+        "已关闭畸形检查"
+      ],
+      "id": 1489,
+      "order": 182
+    },
+    {
+      "type": "easy ifElse",
+      "title": "畸形检查开关 · 完整返回",
+      "pos": [
+        2320,
+        4080
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 215,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 216
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 217
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            211
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1490,
+      "order": 183
+    },
+    {
+      "type": "easy ifElse",
+      "title": "畸形检查开关 · 结论",
+      "pos": [
+        2800,
+        4080
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 218,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 48
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 219
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            220
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1491,
+      "order": 184
+    },
+    {
+      "type": "easy ifElse",
+      "title": "读图开关 · 完整返回",
+      "pos": [
+        1520,
+        -420
+      ],
+      "size": [
+        420,
+        160
+      ],
+      "flags": {},
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "boolean",
+          "type": "BOOLEAN",
+          "link": 212,
+          "widget": {
+            "name": "boolean"
+          }
+        },
+        {
+          "name": "on_true",
+          "type": "*",
+          "link": 213
+        },
+        {
+          "name": "on_false",
+          "type": "*",
+          "link": 214
+        }
+      ],
+      "outputs": [
+        {
+          "name": "*",
+          "type": "*",
+          "links": [
+            209
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "easy ifElse"
+      },
+      "widgets_values": [
+        true
+      ],
+      "id": 1492,
+      "order": 185
     }
   ],
   "links": [
@@ -8039,7 +8227,7 @@
       43,
       1152,
       0,
-      1214,
+      1486,
       0,
       "STRING"
     ],
@@ -8055,8 +8243,8 @@
       48,
       1206,
       0,
-      1217,
-      0,
+      1491,
+      1,
       "STRING"
     ],
     [
@@ -8743,7 +8931,7 @@
       163,
       1408,
       0,
-      1482,
+      1484,
       0,
       "STRING"
     ],
@@ -9013,11 +9201,11 @@
     ],
     [
       209,
+      1492,
+      0,
       1482,
       0,
-      1484,
-      0,
-      "STRING"
+      "*"
     ],
     [
       210,
@@ -9029,11 +9217,83 @@
     ],
     [
       211,
+      1490,
+      0,
       1214,
       0,
-      1486,
+      "*"
+    ],
+    [
+      212,
+      1433,
       0,
+      1492,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      213,
+      1408,
+      0,
+      1492,
+      1,
       "STRING"
+    ],
+    [
+      214,
+      1432,
+      0,
+      1492,
+      2,
+      "STRING"
+    ],
+    [
+      215,
+      1435,
+      0,
+      1490,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      216,
+      1152,
+      0,
+      1490,
+      1,
+      "STRING"
+    ],
+    [
+      217,
+      1489,
+      0,
+      1490,
+      2,
+      "STRING"
+    ],
+    [
+      218,
+      1435,
+      0,
+      1491,
+      0,
+      "BOOLEAN"
+    ],
+    [
+      219,
+      1489,
+      0,
+      1491,
+      2,
+      "STRING"
+    ],
+    [
+      220,
+      1491,
+      0,
+      1217,
+      0,
+      "*"
     ]
   ],
   "groups": [

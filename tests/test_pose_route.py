@@ -65,6 +65,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual((result['system'], result['user'], result['matches']), ('RULES', '把外套改成蓝色', '[]'))
         self.assertIn('不交合', result['status'])
         self.assertIn('"route": "general"', result['extraction'])
+        self.assertEqual(result['image_prompt'], '')
 
     def test_one_usable_entry_is_locked_into_the_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -98,6 +99,29 @@ class LibraryTests(unittest.TestCase):
         self.assertIn('保持衣服', result['user'])
         self.assertIn('pose_test', result['status'])
         self.assertIn('pose_test', result['matches'])
+
+    def test_match_sentence_scores_and_pose_sentence_is_the_prompt(self):
+        prompt = '女人胸朝上，臀支撑，双脚着地。阴茎进入阴道。'
+        match = '女人仰躺，胸朝上，臀承在水平承重面上，双脚着地。阴茎进入阴道。'
+        slots = {name: '' for name in route.SLOT_NAMES}
+        document = {
+            '人数': 2, 'alias': '', '接触': '阴茎进入阴道', '女方支撑': '仰躺', '男方支撑': '', '轴线': '',
+            'body_parts': {'女方': dict(slots), '男方': dict(slots)},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            self.write(Path(tmp), [{
+                'id': 'pose_split', 'number': 3, 'usable_for_selection': True,
+                'source_tags': ['阴道性交'], 'pose_sentence': prompt, 'match_sentence': match,
+            }])
+            loaded = route.load_library(tmp)[0]
+            result = route.prepare(
+                dump(document), '她仰躺，插入她的阴道', 'RULES', 'POSE RULES 不要另选姿势', tmp, '')
+        self.assertEqual(loaded['posture'], '仰躺')
+        self.assertEqual(loaded['slots']['臀'], '臀承在水平承重面上')
+        self.assertEqual(loaded['slots']['脚'], '脚着地')
+        self.assertIn('pose_split', result['status'])
+        self.assertIn(prompt, result['user'])
+        self.assertNotIn('水平承重面', result['user'])
 
     def test_contact_comes_from_source_tags(self):
         self.assertEqual(route.contact_from(['肛交', '阴道性交'], '阴茎进入阴道。'), '阴茎进入阴道')
@@ -454,9 +478,18 @@ class LibraryTests(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertIn('图1是女人的形象。', result['user'])
         self.assertIn('图2是姿势参考图。', result['user'])
+        self.assertIn('把他单独画出来，不要并进女人身体。', result['user'])
+        self.assertIn('把他单独画出来，不要并进女人身体。', route.POSE_RULES)
+        self.assertNotIn('让图1女人完成图2的姿势', route.POSE_RULES)
         self.assertIn('生图详细描述：', result['user'])
         self.assertIn('女人跪着。足接触阴茎。', result['user'])
         self.assertEqual(result['pose_image'], str(picture.resolve()))
+        self.assertEqual(
+            result['image_prompt'],
+            route.tested_prompt('女人跪着。足接触阴茎。'),
+        )
+        self.assertIn('去掉衣服，让她全身赤裸。', result['image_prompt'])
+        self.assertIn('高鼻梁蓝眼睛外国人', result['image_prompt'])
 
 
 class PoseWorkflowTests(unittest.TestCase):
@@ -587,7 +620,9 @@ class ApiWorkflowTests(unittest.TestCase):
         self.assertEqual(self.links[self._by_title('扩写完整返回 · 只有 prompt 字段')['inputs'][0]['link']][1],
                          self._by_title('自定义规则 · API 直接扩写')['id'])
         self.assertEqual(self.links[self._by_title('检查完整返回')['inputs'][0]['link']][1],
-                         self._by_title('大结构检查一次 · API')['id'])
+                         self._by_title('畸形检查开关 · 完整返回')['id'])
+        self.assertEqual(self.links[self._by_title('读图支撑 · 完整返回')['inputs'][0]['link']][1],
+                         self._by_title('读图开关 · 完整返回')['id'])
         self.assertIsNone(self._by_title('提取原话 JSON · API')['inputs'][7]['link'])
         self.assertIsNotNone(self._by_title('读取图片支撑 · API')['inputs'][7]['link'])
         self.assertEqual(self.links[self._by_title('读取图片支撑 · API')['inputs'][7]['link']][1],
@@ -607,15 +642,15 @@ class ApiWorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError) as empty:
             nodes.SXDApiImageBatch().run()
         self.assertIn('没有可发送的图片', str(empty.exception))
-        for title, task, show in (
+        for title, task, source in (
                 ('提取原话 · 校验结果', 'extract', '提取原话 · 完整返回'),
-                ('读图支撑 · 校验结果', 'image_support', '读图支撑 · 完整返回'),
+                ('读图支撑 · 校验结果', 'image_support', '读取图片支撑 · API'),
                 ('扩写 · 校验结果', 'prompt', '扩写完整返回 · 只有 prompt 字段'),
-                ('检查 · 校验结果', 'anatomy', '检查完整返回')):
+                ('检查 · 校验结果', 'anatomy', '大结构检查一次 · API')):
             node = self._by_title(title)
             self.assertEqual(node['type'], 'SXDImageTaskResult')
             self.assertEqual(node['widgets_values'], [task])
-            self.assertEqual(self.links[node['inputs'][0]['link']][1], self._by_title(show)['id'])
+            self.assertEqual(self.links[node['inputs'][0]['link']][1], self._by_title(source)['id'])
         self.assertEqual(self.links[self._by_title('姿势查库 · 取一条或停止')['inputs'][0]['link']][1],
                          self._by_title('提取原话 · 校验结果')['id'])
         self.assertEqual(self.links[self._by_title('读图开关 · 开则识别支撑')['inputs'][1]['link']][1],
@@ -626,6 +661,43 @@ class ApiWorkflowTests(unittest.TestCase):
             nodes.SXDImageTaskResult().run('不是 JSON', 'extract')
         self.assertIn('不是 JSON', str(raised.exception))
         self.assertEqual(PoseWorkflowTests._cross_group_links(self), [])
+        self.assertNotIn(self._by_title('读取图片支撑 · API')['id'], self._reached(closed=True))
+        self.assertNotIn(self._by_title('读图支撑 · 跳过空图')['id'], self._reached(closed=True))
+        self.assertNotIn(self._by_title('大结构检查一次 · API')['id'], self._reached(closed=True))
+        self.assertIn(self._by_title('读取图片支撑 · API')['id'], self._reached(closed=False))
+        self.assertIn(self._by_title('大结构检查一次 · API')['id'], self._reached(closed=False))
+
+    def _reached(self, closed):
+        """展示节点总会执行。开关关掉时，开分支上的调用不能被展示节点拖出来。"""
+        forced_false = set()
+        if closed:
+            for title in ('读图开关 · 开则识别支撑', '读图开关 · 完整返回',
+                          '畸形检查开关 · 关则直接用首次成图', '畸形检查开关 · 完整返回',
+                          '畸形检查开关 · 结论'):
+                forced_false.add(self._by_title(title)['id'])
+            for node in self.workflow['nodes']:
+                if node['type'] != 'easy ifElse':
+                    continue
+                boolean = next(item for item in node['inputs'] if item['name'] == 'boolean')
+                source = self.nodes[self.links[boolean['link']][1]]
+                if source['type'] == 'GetNode' and source['widgets_values'][0] == '需要修复':
+                    forced_false.add(node['id'])
+        seen = set()
+        stack = [node['id'] for node in self.workflow['nodes']
+                 if node['type'] in {'easy showAnything', 'SaveImage', 'PreviewImage'}]
+        while stack:
+            node_id = stack.pop()
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            node = self.nodes[node_id]
+            for item in node.get('inputs') or []:
+                if not item.get('link'):
+                    continue
+                if node_id in forced_false and item['name'] == 'on_true':
+                    continue
+                stack.append(self.links[item['link']][1])
+        return seen
 
     def test_key_comes_from_the_call(self):
         import sys
@@ -639,3 +711,44 @@ class ApiWorkflowTests(unittest.TestCase):
 
     def _by_title(self, title):
         return PoseWorkflowTests._by_title(self, title)
+
+
+class H3ImageWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        path = ROOT / 'workflows/h3/image2image_minimax-h3-qwen38-api-pose-route.json'
+        self.workflow = json.loads(path.read_text())
+        self.nodes = {node['id']: node for node in self.workflow['nodes']}
+        self.links = {link[0]: link for link in self.workflow['links']}
+
+    def test_image_model_is_minimax_h3_and_qwen_encode_is_gone(self):
+        self.assertEqual(self.nodes[10]['widgets_values'][0],
+                         'minimax_h3_image_pruned_int8_convrot.safetensors')
+        self.assertEqual(self.nodes[11]['widgets_values'][:2],
+                         ['qwen3vl_32b_minimax_h3_int8_convrot.safetensors', 'minimax'])
+        self.assertEqual(self.nodes[13]['widgets_values'][0],
+                         'minimax_h3_image_vae_fp16.safetensors')
+        self.assertFalse(any(node['type'] == 'TextEncodeQwenImage21' for node in self.nodes.values()))
+        first = self.nodes[14]
+        repair = self.nodes[1153]
+        self.assertEqual(first['type'], 'MiniMaxH3ImageConditioning')
+        self.assertEqual(repair['type'], 'MiniMaxH3ImageConditioning')
+        self.assertEqual(first['widgets_values_named'], {'prompt': '', 'width': 736, 'height': 1280})
+        self.assertEqual(self.nodes[72]['widgets_values'], ['euler'])
+        self.assertEqual(self.nodes[73]['widgets_values'], ['simple', 6, 1])
+        self.assertEqual(self.nodes[1119]['widgets_values'], [1])
+        self.assertEqual(self.nodes[1118]['mode'], 2)
+        self.assertEqual(self.nodes[1118]['outputs'][0]['links'], [])
+        names = {item['name']: item.get('link') for item in first['inputs']}
+        self.assertEqual(self.links[names['images.image_0']][1], 1309)
+        self.assertEqual(self.links[names['images.image_1']][1], 1426)
+        self.assertEqual(self.links[names['prompt']][1], 1351)
+        route_node = self.nodes[1403]
+        self.assertEqual(route_node['outputs'][8]['name'], 'use_tested_prompt')
+        self.assertEqual(route_node['outputs'][9]['name'], 'image_prompt')
+        choice = next(node for node in self.nodes.values()
+                      if node.get('title') == '匹配后用试跑提示词 · 否则用扩写')
+        self.assertEqual(choice['type'], 'easy ifElse')
+        self.assertEqual(self.links[choice['inputs'][0]['link']][1:3], [1403, 8])
+        self.assertEqual(self.links[choice['inputs'][1]['link']][1:3], [1403, 9])
+        self.assertEqual(self.links[choice['inputs'][2]['link']][1], 1215)
+        self.assertEqual(self.links[self.nodes[1350]['inputs'][0]['link']][1], choice['id'])
