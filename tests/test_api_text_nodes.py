@@ -49,6 +49,7 @@ class APITextNodeTests(unittest.TestCase):
         self.assertEqual(req.full_url, self.params['api_base_url'] + '/chat/completions')
         self.assertEqual(req.get_method(), 'POST')
         self.assertEqual(req.get_header('Authorization'), 'Bearer secret-key')
+        self.assertEqual(req.get_header('User-agent'), 'ComfyUI-SXD-H3-Prompt/1.0')
         self.assertEqual(req.get_header('X-dashscope-datainspection'), '{"input":"cip"}')
         body = json.loads(req.data)
         self.assertEqual(body['messages'], [

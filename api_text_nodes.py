@@ -38,7 +38,11 @@ def _json_object(value, label):
 
 
 def _headers(api_key, extra_headers_json):
-    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'ComfyUI-SXD-H3-Prompt/1.0',
+    }
     extra = _json_object(extra_headers_json, 'headers')
     for name, value in extra.items():
         if not isinstance(name, str) or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name):
