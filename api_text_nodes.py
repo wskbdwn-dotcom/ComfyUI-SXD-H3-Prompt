@@ -117,6 +117,9 @@ class SXDOpenAITextFallback:
             'timeout_sec': ('INT', {'default': 60, 'min': 1, 'max': 3600}),
             'extra_headers_json': ('STRING', {'default': '{}', 'multiline': True}),
             'extra_body_json': ('STRING', {'default': '{}', 'multiline': True}),
+        }, 'optional': {
+            'seed': ('INT', {'default': 0, 'min': 0, 'max': 0x1FFFFFFFFFFFFF,
+                             'tooltip': '仅控制 ComfyUI 缓存；改变后重新请求 API，不传给模型。'}),
         }}
 
     RETURN_TYPES = ('STRING', 'STRING')
@@ -127,7 +130,9 @@ class SXDOpenAITextFallback:
 
     def run(self, original_prompt, system_prompt, api_base_url, api_key, model,
             temperature=0.2, top_p=1.0, max_tokens=1024, max_tokens_field='max_tokens', timeout_sec=60,
-            extra_headers_json='{}', extra_body_json='{}'):
+            extra_headers_json='{}', extra_body_json='{}', seed=0):
+        # ComfyUI includes seed in its input signature; the remote API does not receive it.
+        _ = seed
         try:
             endpoint = _endpoint(api_base_url)
             if not isinstance(model, str) or not model.strip():

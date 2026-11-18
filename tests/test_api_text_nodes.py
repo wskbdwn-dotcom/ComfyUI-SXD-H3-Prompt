@@ -76,6 +76,17 @@ class APITextNodeTests(unittest.TestCase):
         self.assertEqual(body['max_completion_tokens'], 1024)
         self.assertNotIn('max_tokens', body)
 
+    def test_optional_seed_controls_cache_without_changing_api_request(self):
+        self.assertIn('seed', self.node.INPUT_TYPES()['optional'])
+        answer = {'choices': [{'finish_reason': 'stop', 'message': {'content': 'result'}}]}
+        with mock.patch.object(api, '_open', return_value=FakeResponse(answer)) as opened:
+            self.assertEqual(self.node.run(**dict(self.params, seed=1)), ('result', 'success'))
+            first_request = opened.call_args.args[0]
+            self.assertEqual(self.node.run(**dict(self.params, seed=2)), ('result', 'success'))
+            second_request = opened.call_args.args[0]
+        self.assertEqual(first_request.data, second_request.data)
+        self.assertNotIn('seed', json.loads(second_request.data))
+
     def test_http_error_returns_exact_original_and_no_secret(self):
         failure = error.HTTPError('https://secret.invalid', 401, 'secret-key', {}, None)
         with mock.patch.object(api, '_open', side_effect=failure):
