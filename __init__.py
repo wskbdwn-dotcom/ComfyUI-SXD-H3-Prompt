@@ -29,3 +29,7 @@ from .pose_nodes import SXDPoseRoute, register_pose_routes
 NODE_CLASS_MAPPINGS['SXDPoseRoute'] = SXDPoseRoute
 NODE_DISPLAY_NAME_MAPPINGS['SXDPoseRoute'] = 'SXD · 姿势查库'
 register_pose_routes()
+
+from .api_text_nodes import SXDOpenAITextFallback
+NODE_CLASS_MAPPINGS['SXDOpenAITextFallback'] = SXDOpenAITextFallback
+NODE_DISPLAY_NAME_MAPPINGS['SXDOpenAITextFallback'] = 'SXD · API 文本扩写（失败返回原文）'

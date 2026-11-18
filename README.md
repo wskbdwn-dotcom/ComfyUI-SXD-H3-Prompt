@@ -27,6 +27,18 @@ git clone https://github.com/wskbdwn-dotcom/ComfyUI-SXD-H3-Prompt.git
 
 重启 ComfyUI，在节点搜索中查找 `H3 Gemma4 V2`。
 
+### API 文本扩写与失败回退
+
+同一插件还提供 **SXD · API 文本扩写（失败返回原文）**（内部类型 `SXDOpenAITextFallback`）。它走 OpenAI 兼容的 `/chat/completions` 接口，不加载本地 Gemma 模型，也不需要另装 API 节点插件。适合先把原始视频提示词交给远程模型整理，再把第一个输出 `text` 接到 H3 的提示词输入。
+
+- `original_prompt` 接原始提示词；`system_prompt` 填你的格式规则。成功时 `text` 是 API 返回的完整正文；请求或响应失败时，`text` **逐字返回 `original_prompt`**，下游继续运行。`status` 为 `success` 或 `fallback: 原因`。
+- `api_base_url` 可填 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`，节点会补上 `/chat/completions`；填完整端点也可以。`model` 填服务商提供的准确模型 ID。
+- `api_key` 直接填本次调用的 Key；`extra_headers_json` 填自定义请求头 JSON 对象。请求头的值可写字符串，也可写会自动序列化的 JSON 对象，例如 `{"X-DashScope-DataInspection":{"input":"cip"}}`。阿里云的 [Chat Completions 文档](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/)将 `cip` 列为额外检测选项；不启用该选项时省略这个头。若自定义头中已有 `Authorization`，以该头为准。`extra_body_json` 可添加其他请求体字段，但不能覆盖模型、消息和采样参数。
+- 默认只请求一次；连接或读取超时后失败回退。空正文、缺少正常结束标记、截断、内容过滤、无效 JSON、HTTP 错误和网络错误都会回退。节点不跟随 HTTP 重定向，避免把 Key 转发到别的地址。`status` 不包含密钥、请求头、服务商错误正文或 URL。回退时原始提示词没有经过 H3 格式化；如果下游必须接收已格式化内容，请在工作流中检查 `status`。
+- `max_tokens_field` 默认是 `max_tokens`；服务商要求 `max_completion_tokens` 时可以切换。节点只读取非流式完整响应，`extra_body_json` 不接受 `"stream":true`。
+
+ComfyUI 工作流 JSON、任务队列和历史可能保存节点输入。把 Key 直接传给节点时，请控制工作流和历史的访问权限，避免分享包含 Key 的导出文件。通过 ComfyUI API 调用时，可在提交的该节点 `inputs.api_key` 中逐次提供 Key。节点写法参考 [godmt/comfyui-openai-llm](https://github.com/godmt/comfyui-openai-llm) 的 OpenAI 兼容接口与自定义请求头思路，失败回退逻辑由本插件实现。
+
 ### 避免重复安装
 
 为兼容已有工作流，内部节点类型仍是 `H3AuthorGemma4ExpandV2` 和 `H3AuthorGemma4ReleaseV2`。
