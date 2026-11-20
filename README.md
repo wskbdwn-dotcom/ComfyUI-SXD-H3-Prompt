@@ -32,6 +32,9 @@ git clone https://github.com/wskbdwn-dotcom/ComfyUI-SXD-H3-Prompt.git
 同一插件还提供 **SXD · API 文本扩写（失败返回原文）**（内部类型 `SXDOpenAITextFallback`）。它走 OpenAI 兼容的 `/chat/completions` 接口，不加载本地 Gemma 模型，也不需要另装 API 节点插件。适合先把原始视频提示词交给远程模型整理，再把第一个输出 `text` 接到 H3 的提示词输入。
 
 - `original_prompt` 接原始提示词；`system_prompt` 填你的格式规则。成功时 `text` 是 API 返回的完整正文；请求或响应失败时，`text` **逐字返回 `original_prompt`**，下游继续运行。`status` 为 `success` 或 `fallback: 原因`。
+- 支持可选多图：把 `Load Image` 输出接到 `image_1`，连接后自动出现 `image_2`，依次扩展。每个接口也可以接一个 ComfyUI `IMAGE` 图片批次；图片尺寸可以不同，不需要先拼批或缩放。所有图片与文字在同一次 API 请求中发送，需要选择支持图片输入的模型。
+- 图片按接口编号从小到大、再按各接口内部批次顺序编号为 `<Image 1>`、`<Image 2>` 等；跳过未连接的接口。双图分析时建议 `image_1` 接原图、`image_2` 接用户图，两个接口各接一张，并在系统提示词中约定图片用途。断开中间接口不会重命名后续接口。未传图片时保持原有纯文本请求格式和失败回退行为。
+- 通过 ComfyUI API 提交时，图片连线可直接写在该节点的 `inputs` 中，例如 `"image_1": ["原图节点ID", 0]`、`"image_2": ["用户图节点ID", 0]`，可继续增加 `image_3` 等。这里引用的是上游节点输出，不是图片 URL 数组。无效图片输入会返回 `fallback: invalid_images`。
 - `api_base_url` 可填 `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`，节点会补上 `/chat/completions`；填完整端点也可以。`model` 填服务商提供的准确模型 ID。
 - `api_key` 直接填本次调用的 Key；`extra_headers_json` 填自定义请求头 JSON 对象。请求头的值可写字符串，也可写会自动序列化的 JSON 对象，例如 `{"X-DashScope-DataInspection":{"input":"cip"}}`。阿里云的 [Chat Completions 文档](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/)将 `cip` 列为额外检测选项；不启用该选项时省略这个头。若自定义头中已有 `Authorization`，以该头为准。`extra_body_json` 可添加其他请求体字段，但不能覆盖模型、消息和采样参数。
 - 默认只请求一次；连接或读取超时后失败回退。空正文、缺少正常结束标记、截断、内容过滤、无效 JSON、HTTP 错误和网络错误都会回退。节点不跟随 HTTP 重定向，避免把 Key 转发到别的地址。`status` 不包含密钥、请求头、服务商错误正文或 URL。回退时原始提示词没有经过 H3 格式化；如果下游必须接收已格式化内容，请在工作流中检查 `status`。
@@ -174,6 +177,7 @@ git pull --ff-only
 ```bash
 python -m unittest discover -s tests -v
 node tests/test_live.mjs
+node tests/test_api_images.mjs
 ```
 
 测试需要 numpy、Pillow，通过模拟 ComfyUI 和推理接口验证规则、图片预处理、缓存生命周期、思考开关及示例连线，不加载真实模型。实时输出另有浏览器事件模拟测试；仍需在实际 ComfyUI/RunPod 上验证前端显示和 GPU 推理。

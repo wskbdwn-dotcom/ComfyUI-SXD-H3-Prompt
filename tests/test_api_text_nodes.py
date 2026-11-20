@@ -1,6 +1,8 @@
 """Offline checks for the API text node's successful and fallback paths."""
 
 import json
+import base64
+import io
 import importlib.util
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -174,6 +176,68 @@ class APITextNodeTests(unittest.TestCase):
         with mock.patch.object(api, '_open', side_effect=RuntimeError('unexpected')):
             with self.assertRaisesRegex(RuntimeError, 'unexpected'):
                 self.node.run(**self.params)
+
+    def test_dynamic_image_schema_keeps_seed_and_checks_image_type(self):
+        optional = self.node.INPUT_TYPES()['optional']
+        self.assertIn('seed', optional)
+        self.assertIn('image_10', optional)
+        self.assertEqual(optional['image_10'], ('IMAGE',))
+        self.assertNotIn('image_0', optional)
+        self.assertNotIn('unrelated', optional)
+        self.assertEqual(set(json.loads(json.dumps(optional))), {'seed', 'image_1'})
+
+    def test_multi_image_request_preserves_numeric_slot_batch_order_and_sizes(self):
+        import numpy as np
+        from PIL import Image
+
+        # Mixed dimensions must not require a resizing/concatenation node.
+        inputs = {'image_10': np.ones((1, 4, 3, 4), dtype=np.float32),
+                  'image_2': np.zeros((2, 2, 5, 3), dtype=np.float32), 'image_1': None}
+        inputs['image_2'][1] = 0.5
+        answer = {'choices': [{'finish_reason': 'stop', 'message': {'content': '{"people":2}'}}]}
+        with mock.patch.object(api, '_open', return_value=FakeResponse(answer)) as opened:
+            self.assertEqual(self.node.run(**self.params, **inputs), ('{"people":2}', 'success'))
+        opened.assert_called_once()
+        body = json.loads(opened.call_args.args[0].data)
+        content = body['messages'][-1]['content']
+        self.assertEqual(content[0], {'type': 'text', 'text': self.params['original_prompt']})
+        self.assertEqual([item['text'] for item in content[1::2]], [
+            '<Image 1> (image_2, item 1)', '<Image 2> (image_2, item 2)',
+            '<Image 3> (image_10, item 1)'])
+        decoded = [Image.open(io.BytesIO(base64.b64decode(item['image_url']['url'].split(',', 1)[1])))
+                   for item in content[2::2]]
+        self.assertEqual([image.size for image in decoded], [(5, 2), (5, 2), (3, 4)])
+        self.assertEqual(decoded[0].getpixel((0, 0)), (0, 0, 0))
+        self.assertEqual(decoded[1].getpixel((0, 0)), (128, 128, 128))
+        self.assertEqual(decoded[2].mode, 'RGBA')
+
+    def test_image_tensor_is_detached_and_moved_to_cpu(self):
+        import numpy as np
+
+        frame = mock.Mock()
+        frame.detach.return_value.cpu.return_value.float.return_value.numpy.return_value = np.zeros((2, 3, 1))
+        batch = mock.Mock(ndim=4, shape=(1, 2, 3, 1))
+        batch.__iter__ = mock.Mock(return_value=iter([frame]))
+        content = api._user_content('look', {'image_1': batch})
+        self.assertEqual(len(content), 3)
+        frame.detach.return_value.cpu.assert_called_once()
+
+    def test_invalid_images_fall_back_before_request(self):
+        import numpy as np
+
+        for batch in (np.zeros((2, 2, 3)), np.zeros((1, 2, 2, 2)),
+                      np.full((1, 2, 2, 3), np.nan), np.zeros((1, 0, 2, 3))):
+            with self.subTest(shape=batch.shape):
+                with mock.patch.object(api, '_open') as opened:
+                    self.assertEqual(self.node.run(**self.params, image_1=batch),
+                                     (self.params['original_prompt'], 'fallback: invalid_images'))
+                opened.assert_not_called()
+
+    def test_empty_and_unconnected_image_inputs_preserve_text_request(self):
+        import numpy as np
+
+        self.assertEqual(api._user_content(' unchanged ', {'image_1': None}), ' unchanged ')
+        self.assertEqual(api._user_content(' unchanged ', {'image_1': np.zeros((0, 2, 2, 3))}), ' unchanged ')
 
 if __name__ == '__main__':
     unittest.main()
