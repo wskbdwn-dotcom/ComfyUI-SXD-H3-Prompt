@@ -239,5 +239,25 @@ class APITextNodeTests(unittest.TestCase):
         self.assertEqual(api._user_content(' unchanged ', {'image_1': None}), ' unchanged ')
         self.assertEqual(api._user_content(' unchanged ', {'image_1': np.zeros((0, 2, 2, 3))}), ' unchanged ')
 
+    def test_explicit_json_mode_validates_and_normalizes_object(self):
+        params = dict(self.params, extra_body_json='{"response_format":{"type":"json_object"}}')
+        answer = {'choices': [{'finish_reason': 'stop', 'message': {'content': ' { "ready": true } '}}]}
+        with mock.patch.object(api, '_open', return_value=FakeResponse(answer)) as opened:
+            self.assertEqual(self.node.run(**params), ('{"ready":true}', 'success'))
+        self.assertEqual(json.loads(opened.call_args.args[0].data)['response_format'], {'type': 'json_object'})
+
+    def test_bad_json_mode_response_returns_exact_original(self):
+        params = dict(self.params, extra_body_json='{"response_format":{"type":"json_object"}}')
+        for text in ('plain text', '[]', '```json\n{}\n```', '{"a":1,"a":2}', '{"a":NaN}'):
+            answer = {'choices': [{'finish_reason': 'stop', 'message': {'content': text}}]}
+            with self.subTest(text=text):
+                with mock.patch.object(api, '_open', return_value=FakeResponse(answer)):
+                    self.assertEqual(self.node.run(**params),
+                                     (self.params['original_prompt'], 'fallback: invalid_response_json'))
+
+    def test_normal_text_mode_does_not_require_json(self):
+        self.assertEqual(api._content({'choices': [{'finish_reason': 'stop', 'message': {'content': 'plain text'}}]}),
+                         'plain text')
+
 if __name__ == '__main__':
     unittest.main()

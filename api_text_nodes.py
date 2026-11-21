@@ -130,6 +130,28 @@ def _content(data):
     return content
 
 
+def _json_content(text):
+    """Validate explicit JSON-mode responses locally, including ignored provider settings."""
+    def object_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError('invalid_response_json')
+            result[key] = value
+        return result
+
+    def invalid_constant(_):
+        raise ValueError('invalid_response_json')
+
+    try:
+        value = json.loads(text, object_pairs_hook=object_pairs, parse_constant=invalid_constant)
+    except (ValueError, RecursionError) as exc:
+        raise ValueError('invalid_response_json') from exc
+    if not isinstance(value, dict):
+        raise ValueError('invalid_response_json')
+    return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+
+
 def _fallback_reason(exc):
     # Never include provider error bodies, URLs, headers, or keys in a workflow output.
     if isinstance(exc, error.HTTPError):
@@ -144,7 +166,8 @@ def _fallback_reason(exc):
         return 'invalid_json'
     if isinstance(exc, ValueError) and str(exc) in {
             'invalid_url', 'invalid_headers', 'invalid_body', 'invalid_response',
-            'incomplete_response', 'empty_response', 'invalid_model', 'invalid_images'}:
+            'incomplete_response', 'empty_response', 'invalid_model', 'invalid_images',
+            'invalid_response_json'}:
         return str(exc)
     return 'request_error'
 
@@ -205,7 +228,11 @@ class SXDOpenAITextFallback:
             req = request.Request(endpoint, data=payload, headers=headers, method='POST')
             with _open(req, timeout_sec) as response:
                 data = json.loads(response.read().decode('utf-8'))
-            return (_content(data), 'success')
+            text = _content(data)
+            response_format = extra.get('response_format')
+            if isinstance(response_format, dict) and response_format.get('type') in ('json_object', 'json_schema'):
+                text = _json_content(text)
+            return (text, 'success')
         except (error.HTTPError, error.URLError, TimeoutError, OSError,
                 ValueError, TypeError, UnicodeError, http.client.HTTPException) as exc:
             return (original_prompt, 'fallback: ' + _fallback_reason(exc))

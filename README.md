@@ -39,6 +39,7 @@ git clone https://github.com/wskbdwn-dotcom/ComfyUI-SXD-H3-Prompt.git
 - `api_key` 直接填本次调用的 Key；`extra_headers_json` 填自定义请求头 JSON 对象。请求头的值可写字符串，也可写会自动序列化的 JSON 对象，例如 `{"X-DashScope-DataInspection":{"input":"cip"}}`。阿里云的 [Chat Completions 文档](https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions/)将 `cip` 列为额外检测选项；不启用该选项时省略这个头。若自定义头中已有 `Authorization`，以该头为准。`extra_body_json` 可添加其他请求体字段，但不能覆盖模型、消息和采样参数。
 - 默认只请求一次；连接或读取超时后失败回退。空正文、缺少正常结束标记、截断、内容过滤、无效 JSON、HTTP 错误和网络错误都会回退。节点不跟随 HTTP 重定向，避免把 Key 转发到别的地址。`status` 不包含密钥、请求头、服务商错误正文或 URL。回退时原始提示词没有经过 H3 格式化；如果下游必须接收已格式化内容，请在工作流中检查 `status`。
 - `max_tokens_field` 默认是 `max_tokens`；服务商要求 `max_completion_tokens` 时可以切换。节点只读取非流式完整响应，`extra_body_json` 不接受 `"stream":true`。
+- 需要 JSON 回复时，在 `extra_body_json` 填 `{"response_format":{"type":"json_object"}}`。节点会检查回复是否为合法 JSON 对象，拒绝重复键和非标准数值，并输出紧凑 JSON；失败返回 `fallback: invalid_response_json` 和原文。它不校验业务字段或完整 JSON Schema。普通文本请求保持原样。
 - `seed` 是可选的缓存控制值，不会发给远程模型。ComfyUI 界面默认将其设为“生成后随机化”：每次排队都会换值并重新请求，包括上次失败回退的情况。改为“固定”时，相同输入可能直接复用上次结果，失败回退也可能被缓存。通过 ComfyUI API 提交工作流时，调用方要在该节点的 `inputs.seed` 中主动传入新值才能强制重试；不传时继续兼容旧工作流，但不会自动重试。
 
 ComfyUI 工作流 JSON、任务队列和历史可能保存节点输入。把 Key 直接传给节点时，请控制工作流和历史的访问权限，避免分享包含 Key 的导出文件。通过 ComfyUI API 调用时，可在提交的该节点 `inputs.api_key` 中逐次提供 Key。节点写法参考 [godmt/comfyui-openai-llm](https://github.com/godmt/comfyui-openai-llm) 的 OpenAI 兼容接口与自定义请求头思路，失败回退逻辑由本插件实现。
